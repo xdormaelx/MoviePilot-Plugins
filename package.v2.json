@@ -1,5 +1,5 @@
 {
-  "CustomSites": {
+  "HA": {
       "name": "HA助手",
       "description": "与HA联动",
       "labels": "消息通知",

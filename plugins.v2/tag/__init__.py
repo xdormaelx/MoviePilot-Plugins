@@ -16,9 +16,9 @@ from app.utils.string import StringUtils
 
 class DownloadSiteTag(_PluginBase):
     # 插件名称
-    plugin_name = "自动贴站点标签"
+    plugin_name = "自动标签"
     # 插件描述
-    plugin_desc = "自动给qb、tr的下载任务贴站点标签"
+    plugin_desc = "给qb、tr的下载任务贴标签(支持自定义)"
     # 插件图标
     plugin_icon = "Youtube-dl_B.png"
     # 插件版本
@@ -49,7 +49,7 @@ class DownloadSiteTag(_PluginBase):
     _interval_time = 24
     _interval_unit = "小时"
     _downloaders = None
-    _tracker_map = "tracker地址:站点网址"
+    _tracker_map = "tracker地址:站点标签"
     _save_path_map = "保存地址:标签"
 
     def init_plugin(self, config: dict = None):
@@ -64,7 +64,7 @@ class DownloadSiteTag(_PluginBase):
             self._interval_time = self.str_to_number(config.get("interval_time"), 24)
             self._interval_unit = config.get("interval_unit") or "小时"
             self._downloaders = config.get("downloaders")
-            self._tracker_map = config.get("tracker_map") or "tracker地址:站点网址"
+            self._tracker_map = config.get("tracker_map") or "tracker地址:站点标签"
             self._save_path_map = config.get("save_path_map") or "保存地址:标签"
 
         # 停止现有任务
@@ -530,9 +530,9 @@ class DownloadSiteTag(_PluginBase):
                                         "component": "VTextarea",
                                         "props": {
                                             "model": "tracker_map",
-                                            "label": "tracker网址:站点网址",
+                                            "label": "tracker网址:站点标签",
                                             "rows": 5,
-                                            "placeholder": "tracker网址:站点网址",
+                                            "placeholder": "如:tracker.XXX:XX",
                                         },
                                     }
                                 ],
@@ -554,7 +554,7 @@ class DownloadSiteTag(_PluginBase):
                                             "model": "save_path_map",
                                             "label": "保存地址:标签",
                                             "rows": 5,
-                                            "placeholder": "保存地址:标签",
+                                            "placeholder": "如:/volume1/XX保种/:XX保种\n/volume1/保种/:保种",
                                         },
                                     }
                                 ],
@@ -575,7 +575,7 @@ class DownloadSiteTag(_PluginBase):
                                         'props': {
                                             'type': 'info',
                                             'variant': 'tonal',
-                                            'text': '插件调用MP命令，网站地址请复制站点信息中的地址'
+                                            'text': '每行配置一个，只会匹配一个，行数越高优先级越高。注意！！需用英文的:。'
                                         }
                                     }
                                 ]
@@ -591,7 +591,7 @@ class DownloadSiteTag(_PluginBase):
             "interval_cron": "0 12 * * *",
             "interval_time": "24",
             "interval_unit": "小时",
-            "tracker_map": "tracker地址:站点网址",
+            "tracker_map": "tracker地址:站点标签",
             "save_path_map": "保存地址:标签"
         }
 
@@ -599,9 +599,6 @@ class DownloadSiteTag(_PluginBase):
         pass
 
     def stop_service(self):
-        """
-        停止服务
-        """
         try:
             if self._scheduler:
                 self._scheduler.remove_all_jobs()

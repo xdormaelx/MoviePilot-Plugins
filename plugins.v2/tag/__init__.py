@@ -7,13 +7,10 @@ from app.helper.sites import SitesHelper
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from app.core.config import settings
-from app.core.context import Context
-from app.core.event import eventmanager, Event
 from app.helper.downloader import DownloaderHelper
 from app.log import logger
 from app.plugins import _PluginBase
 from app.schemas import ServiceInfo
-from app.schemas.types import EventType
 from app.utils.string import StringUtils
 
 
@@ -56,8 +53,8 @@ class DownloadSiteTag(_PluginBase):
     _save_path_map = "保存地址:标签"
 
     def init_plugin(self, config: dict = None):
-        self.downloader_helper = DownloaderHelper()
         self.sites_helper = SitesHelper()
+        self.downloader_helper = DownloaderHelper()
         # 读取配置
         if config:
             self._enabled = config.get("enabled")
@@ -145,7 +142,7 @@ class DownloadSiteTag(_PluginBase):
                     if self._interval_unit == "小时":
                         return [{
                             "id": "Tag",
-                            "name": "补全站点标签",
+                            "name": "自动补全标签",
                             "trigger": "interval",
                             "func": self._complemented_history,
                             "kwargs": {
@@ -158,7 +155,7 @@ class DownloadSiteTag(_PluginBase):
                             logger.info(f"{self.LOG_TAG}启动定时服务: 最小不少于5分钟, 防止执行间隔太短任务冲突")
                         return [{
                             "id": "Tag",
-                            "name": "补全站点标签",
+                            "name": "自动补全标签",
                             "trigger": "interval",
                             "func": self._complemented_history,
                             "kwargs": {
@@ -168,7 +165,7 @@ class DownloadSiteTag(_PluginBase):
                 else:
                     return [{
                         "id": "Tag",
-                        "name": "补全站点标签",
+                        "name": "自动补全标签",
                         "trigger": CronTrigger.from_crontab(self._interval_cron),
                         "func": self._complemented_history,
                         "kwargs": {}
@@ -183,15 +180,26 @@ class DownloadSiteTag(_PluginBase):
             return i
 
     def _complemented_history(self):
-        """
-        补全站点标签
-        """
         if not self.service_infos:
             return
         logger.info(f"{self.LOG_TAG}开始执行 ...")
         # 所有站点索引
         indexers = [indexer.get("name") for indexer in self.sites_helper.get_indexers()]
         indexers = set(indexers)
+        tracker_maps = self._tracker_map.split("\n")
+        save_path_maps = self._save_path_map.split("\n")
+        tracker_map = {}
+        save_path_map = {}
+        for item in tracker_maps:
+            i = item.split(":")
+            _tracker = i[0]
+            _label = i[1]
+            tracker_map[_tracker] = _label
+        for item in save_path_maps:
+            i = item.split(":")
+            _path = i[0]
+            _label = i[1]
+            save_path_map[_path] = _label
         for service in self.service_infos.values():
             downloader = service.name
             downloader_obj = service.instance
@@ -222,39 +230,32 @@ class DownloadSiteTag(_PluginBase):
                     torrent_sites = []
                     # 如果标签已经存在任意站点, 则不再添加站点标签
                     if not indexers.intersection(set(torrent_tags)):
+                        site = None
                         trackers = self._get_trackers(torrent=torrent, dl_type=service.type)
                         for tracker in trackers:
-                            # 检查tracker是否包含特定的关键字，并进行相应的映射
-                            for key, mapped_domain in self._tracker_map.items():
-                                if key in tracker:
-                                    domain = mapped_domain
-                                    break
-                            else:
-                                domain = StringUtils.get_url_domain(tracker)
+                            domain = StringUtils.get_url_domain(tracker)
                             site_info = self.sites_helper.get_indexer(domain)
                             if site_info:
-                                torrent_sites.append(site_info.get("name"))
+                                site = site_info.get("name")
+                            else:
+                                for key, label in tracker_map.items():
+                                    if key in tracker:
+                                        site = label
+                                        break
+                            if site:
+                                torrent_sites.append(site)
                                 break
-                    for key, label in self._save_path_map.items():
+                    for key, label in save_path_map.items():
                         if key in _path:
                             torrent_sites.append(label)
-                    # 按设置生成需要写入的标签与分类
-                    # 因允许torrent_site为空时运行到此, 因此需要判断torrent_site不为空
+                            break
+                    # 因允许torrent_sites为空时运行到此, 因此需要判断torrent_sites不为空
                     if torrent_sites:
-                        _tags = torrent_sites
-                        # 去除种子已经存在的标签
-                        if torrent_tags:
-                            _tags = list(set(_tags) - set(torrent_tags))
-                        # 判断当前种子是否不需要修改
-                        if not _tags:
-                            continue
-                        # 执行通用方法, 设置种子标签与分类
-                        self._set_torrent_info(service=service, _hash=_hash, _torrent=torrent, _tags=_tags,
+                        self._set_torrent_info(service=service, _hash=_hash, _tags=torrent_sites,
                                                _original_tags=torrent_tags)
                 except Exception as e:
                     logger.error(
                         f"{self.LOG_TAG}分析种子信息时发生了错误: {str(e)}")
-
         logger.info(f"{self.LOG_TAG}执行完成")
 
     @staticmethod
@@ -351,73 +352,22 @@ class DownloadSiteTag(_PluginBase):
             print(str(e))
             return []
 
-    def _set_torrent_info(self, service: ServiceInfo, _hash: str, _torrent: Any = None, _tags=None,
+    def _set_torrent_info(self, service: ServiceInfo, _hash: str, _tags=None,
                           _original_tags: list = None):
         """
         设置种子标签
         """
-        if not service or not service.instance:
+        if not service or not service.instance or not _tags or not _hash:
             return
-        if _tags is None:
-            _tags = []
         downloader_obj = service.instance
-        if not _torrent:
-            _torrent, error = downloader_obj.get_torrents(ids=_hash)
-            if not _torrent or error:
-                logger.error(
-                    f"{self.LOG_TAG}设置种子标签时发生了错误: 通过 {_hash} 查询不到任何种子!")
-                return
-            _torrent = _torrent[0]
-        # 判断是否可执行
-        if _hash and _torrent:
-            # 下载器api不通用, 因此需分开处理
-            if service.type == "qbittorrent":
-                # 设置标签
-                if _tags:
-                    downloader_obj.set_torrents_tag(ids=_hash, tags=_tags)
-            else:
-                # 设置标签
-                if _tags:
-                    # _original_tags = None表示未指定, 因此需要获取原始标签
-                    if _original_tags is None:
-                        _original_tags = self._get_label(torrent=_torrent, dl_type=service.type)
-                    # 如果原始标签不是空的, 那么合并原始标签
-                    if _original_tags:
-                        _tags = list(set(_original_tags).union(set(_tags)))
-                    downloader_obj.set_torrent_tag(ids=_hash, tags=_tags)
-            logger.warn(
-                f"{self.LOG_TAG}下载器: {service.name} 种子id: {_hash} {('  标签: ' + ','.join(_tags)) if _tags else ''}")
-
-    @eventmanager.register(EventType.DownloadAdded)
-    def download_added(self, event: Event):
-        """
-        添加下载事件
-        """
-        if not self.get_state():
-            return
-
-        if not event.event_data:
-            return
-
-        try:
-            downloader = event.event_data.get("downloader")
-            if not downloader:
-                logger.info("触发添加下载事件，但没有获取到下载器信息，跳过后续处理")
-                return
-
-            service = self.service_infos.get(downloader)
-            if not service:
-                logger.info(f"触发添加下载事件，但没有监听下载器 {downloader}，跳过后续处理")
-                return
-
-            context: Context = event.event_data.get("context")
-            _hash = event.event_data.get("hash")
-            _torrent = context.torrent_info
-            _tags = [_torrent.site_name]
-            self._set_torrent_info(service=service, _hash=_hash, _tags=_tags)
-        except Exception as e:
-            logger.error(
-                f"{self.LOG_TAG}分析下载事件时发生了错误: {str(e)}")
+        # 下载器api不通用, 因此需分开处理
+        if service.type == "qbittorrent" and _original_tags:
+            # 去除种子已经存在的标签
+            _tags = list(set(_tags) - set(_original_tags))
+        else:
+            _tags = list(set(_original_tags).union(set(_tags)))
+        downloader_obj.set_torrent_tag(ids=_hash, tags=_tags)
+        logger.warn(f"{self.LOG_TAG}下载器: {service.name} 种子id: {_hash} {('  标签: ' + ','.join(_tags)) if _tags else ''}")
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         """

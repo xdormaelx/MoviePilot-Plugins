@@ -13,7 +13,7 @@
     "description": "给qb、tr的下载任务打站点标签",
     "labels": "下载管理",
     "version": "1.0",
-    "icon": "https://github.com/aClarkChen/MoviePilot-Plugins/blob/main/icons/tag.png?raw=true",
+    "icon": "Youtube-dl_A.png",
     "author": "ClarkChen",
     "level": 2
 }

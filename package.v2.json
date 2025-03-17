@@ -7,5 +7,13 @@
       "icon": "https://github.com/aClarkChen/MoviePilot-Plugins/blob/main/icons/ha.png?raw=true",
       "author": "ClarkChen",
       "level": 2
-  }
+  },
+  "Tag": {
+    "name": "自动标签",
+    "description": "给qb、tr的下载任务打站点标签",
+    "labels": "下载管理",
+    "version": "1.0",
+    "icon": "https://github.com/aClarkChen/MoviePilot-Plugins/blob/main/icons/tag.png?raw=true",
+    "author": "ClarkChen",
+    "level": 2
 }

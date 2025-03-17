@@ -25,7 +25,7 @@ class HA(_PluginBase):
     # 插件作者
     plugin_author = "ClarkChen"
     # 作者主页
-    author_url = "https://github.com/aClarkChen/MoviePilot-Plugins/blob/main/icons/ha.png?raw=true"
+    author_url = "https://github.com/aClarkChen"
     # 插件配置项ID前缀
     plugin_config_prefix = "ha_"
     # 加载顺序

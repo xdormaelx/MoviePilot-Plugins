@@ -9,11 +9,11 @@
       "level": 2
   },
   "Tag": {
-    "name": "自动标签",
-    "description": "给qb、tr的下载任务打站点标签",
+    "name": "自动贴站点标签",
+    "description": "自动给qb、tr的下载任务贴站点标签",
     "labels": "下载管理",
     "version": "1.0",
-    "icon": "Youtube-dl_A.png",
+    "icon": "Youtube-dl_B.png",
     "author": "ClarkChen",
     "level": 2
 }

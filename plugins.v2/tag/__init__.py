@@ -82,7 +82,7 @@ class Tag(_PluginBase):
             config.update({"onlyonce": self._onlyonce})
             self.update_config(config)
             # 补全站点标签
-            self._scheduler.add_job(func=self._complemented_history, trigger='date',
+            self._scheduler.add_job(func=self._complemented_tags, trigger='date',
                                     run_date=datetime.datetime.now(
                                         tz=pytz.timezone(settings.TZ)) + datetime.timedelta(seconds=3)
                                     )
@@ -94,9 +94,6 @@ class Tag(_PluginBase):
 
     @property
     def service_infos(self) -> Optional[Dict[str, ServiceInfo]]:
-        """
-        服务信息
-        """
         if not self._downloaders:
             logger.warning("尚未配置下载器，请检查配置")
             return None
@@ -122,13 +119,6 @@ class Tag(_PluginBase):
     def get_state(self) -> bool:
         return self._enabled
 
-    @staticmethod
-    def get_command() -> List[Dict[str, Any]]:
-        pass
-
-    def get_api(self) -> List[Dict[str, Any]]:
-        pass
-
     def get_service(self) -> List[Dict[str, Any]]:
         """
         注册插件公共服务
@@ -148,7 +138,7 @@ class Tag(_PluginBase):
                             "id": "Tag",
                             "name": "自动补全标签",
                             "trigger": "interval",
-                            "func": self._complemented_history,
+                            "func": self._complemented_tags,
                             "kwargs": {
                                 "hours": self._interval_time
                             }
@@ -161,7 +151,7 @@ class Tag(_PluginBase):
                             "id": "Tag",
                             "name": "自动补全标签",
                             "trigger": "interval",
-                            "func": self._complemented_history,
+                            "func": self._complemented_tags,
                             "kwargs": {
                                 "minutes": self._interval_time
                             }
@@ -171,7 +161,7 @@ class Tag(_PluginBase):
                         "id": "Tag",
                         "name": "自动补全标签",
                         "trigger": CronTrigger.from_crontab(self._interval_cron),
-                        "func": self._complemented_history,
+                        "func": self._complemented_tags,
                         "kwargs": {}
                     }]
         return []
@@ -183,7 +173,7 @@ class Tag(_PluginBase):
         except ValueError:
             return i
 
-    def _complemented_history(self):
+    def _complemented_tags(self):
         if not self.service_infos:
             return
         logger.info(f"{self.LOG_TAG}开始执行 ...")
@@ -229,8 +219,6 @@ class Tag(_PluginBase):
                     _path = self._get_path(torrent=torrent, dl_type=service.type)
                     if not _hash or not _path:
                         continue
-                    # 获取种子当前标签
-                    torrent_tags = self._get_label(torrent=torrent, dl_type=service.type)
                     torrent_labels = []
                     if self._site_first:
                         for key, label in save_path_map.items():
@@ -238,7 +226,9 @@ class Tag(_PluginBase):
                                 torrent_labels.append(label)
                                 break
                     site = None
+                    torrent_tags = None
                     if not self._cover:
+                        torrent_tags = self._get_tags(torrent=torrent, dl_type=service.type)
                         site = indexers.intersection(set(torrent_tags))
                     if not site:
                         trackers = self._get_trackers(torrent=torrent, dl_type=service.type)
@@ -269,26 +259,7 @@ class Tag(_PluginBase):
         logger.info(f"{self.LOG_TAG}执行完成")
 
     @staticmethod
-    def _torrent_key(torrent: Any, dl_type: str) -> Optional[Tuple[int, str]]:
-        """
-        按种子大小和时间返回key
-        """
-        if dl_type == "qbittorrent":
-            size = torrent.get('size')
-            name = torrent.get('name')
-        else:
-            size = torrent.total_size
-            name = torrent.name
-        if not size or not name:
-            return None
-        else:
-            return size, name
-
-    @staticmethod
     def _get_hash(torrent: Any, dl_type: str):
-        """
-        获取种子hash
-        """
         try:
             return torrent.get("hash") if dl_type == "qbittorrent" else torrent.hashString
         except Exception as e:
@@ -297,9 +268,6 @@ class Tag(_PluginBase):
 
     @staticmethod
     def _get_path(torrent: Any, dl_type: str):
-        """
-        获取种子保存路径
-        """
         try:
             return torrent.get("save_path") if dl_type == "qbittorrent" else torrent.download_dir
         except Exception as e:
@@ -308,42 +276,11 @@ class Tag(_PluginBase):
 
     @staticmethod
     def _get_trackers(torrent: Any, dl_type: str):
-        """
-        获取种子trackers
-        """
         try:
             if dl_type == "qbittorrent":
-                """
-                url	字符串	跟踪器网址
-                status	整数	跟踪器状态。有关可能的值，请参阅下表
-                tier	整数	跟踪器优先级。较低级别的跟踪器在较高级别的跟踪器之前试用。当特殊条目（如 DHT）不存在时，层号用作占位符时，层号有效。>= 0< 0tier
-                num_peers	整数	跟踪器报告的当前 torrent 的对等体数量
-                num_seeds	整数	当前种子的种子数，由跟踪器报告
-                num_leeches	整数	当前种子的水蛭数量，如跟踪器报告的那样
-                num_downloaded	整数	跟踪器报告的当前 torrent 的已完成下载次数
-                msg	字符串	跟踪器消息（无法知道此消息是什么 - 由跟踪器管理员决定）
-                """
                 return [tracker.get("url") for tracker in (torrent.trackers or []) if
                         tracker.get("tier", -1) >= 0 and tracker.get("url")]
             else:
-                """
-                class Tracker(Container):
-                    @property
-                    def id(self) -> int:
-                        return self.fields["id"]
-
-                    @property
-                    def announce(self) -> str:
-                        return self.fields["announce"]
-
-                    @property
-                    def scrape(self) -> str:
-                        return self.fields["scrape"]
-
-                    @property
-                    def tier(self) -> int:
-                        return self.fields["tier"]
-                """
                 return [tracker.announce for tracker in (torrent.trackers or []) if
                         tracker.tier >= 0 and tracker.announce]
         except Exception as e:
@@ -351,10 +288,7 @@ class Tag(_PluginBase):
             return []
 
     @staticmethod
-    def _get_label(torrent: Any, dl_type: str):
-        """
-        获取种子标签
-        """
+    def _get_tags(torrent: Any, dl_type: str):
         try:
             return [str(tag).strip() for tag in torrent.get("tags", "").split(',')] \
                 if dl_type == "qbittorrent" else torrent.labels or []
@@ -362,12 +296,8 @@ class Tag(_PluginBase):
             print(str(e))
             return []
 
-    def _set_torrent_info(self, service: ServiceInfo, _hash: str, _tags=None,
-                          _original_tags: list = None):
-        """
-        设置种子标签
-        """
-        if not service or not service.instance or not _tags or not _hash:
+    def _set_torrent_info(self, service: ServiceInfo, _hash: str, _tags=None, _original_tags: list = None):
+        if not service or not service.instance:
             return
         downloader_obj = service.instance
         # 下载器api不通用, 因此需分开处理
@@ -393,9 +323,6 @@ class Tag(_PluginBase):
         logger.warn(f"{self.LOG_TAG}下载器: {service.name} 种子id: {_hash} {('  标签: ' + ','.join(_tags)) if _tags else ''}")
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
-        """
-        拼装插件配置页面，需要返回两块数据：1、页面配置；2、数据结构
-        """
         return [
             {
                 'component': 'VForm',
@@ -649,9 +576,6 @@ class Tag(_PluginBase):
             "tracker_map": "tracker地址:站点标签",
             "save_path_map": "保存地址:标签"
         }
-
-    def get_page(self) -> List[dict]:
-        pass
 
     def stop_service(self):
         try:

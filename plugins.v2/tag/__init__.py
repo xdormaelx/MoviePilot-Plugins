@@ -44,6 +44,8 @@ class DownloadSiteTag(_PluginBase):
     _scheduler = None
     _enabled = False
     _onlyonce = False
+    _cover = False
+    _site_first = False
     _interval = "计划任务"
     _interval_cron = "0 12 * * *"
     _interval_time = 24
@@ -59,6 +61,8 @@ class DownloadSiteTag(_PluginBase):
         if config:
             self._enabled = config.get("enabled")
             self._onlyonce = config.get("onlyonce")
+            self._cover = config.get("cover")
+            self._site_first = config.get("site_first")
             self._interval = config.get("interval") or "计划任务"
             self._interval_cron = config.get("interval_cron") or "0 12 * * *"
             self._interval_time = self.str_to_number(config.get("interval_time"), 24)
@@ -228,6 +232,11 @@ class DownloadSiteTag(_PluginBase):
                     # 获取种子当前标签
                     torrent_tags = self._get_label(torrent=torrent, dl_type=service.type)
                     torrent_sites = []
+                    if self._site_first:
+                        for key, label in save_path_map.items():
+                            if key in _path:
+                                torrent_sites.append(label)
+                                break
                     # 如果标签已经存在任意站点, 则不再添加站点标签
                     if not indexers.intersection(set(torrent_tags)):
                         site = None
@@ -245,10 +254,11 @@ class DownloadSiteTag(_PluginBase):
                             if site:
                                 torrent_sites.append(site)
                                 break
-                    for key, label in save_path_map.items():
-                        if key in _path:
-                            torrent_sites.append(label)
-                            break
+                    if not self._site_first:
+                        for key, label in save_path_map.items():
+                            if key in _path:
+                                torrent_sites.append(label)
+                                break
                     # 因允许torrent_sites为空时运行到此, 因此需要判断torrent_sites不为空
                     if torrent_sites:
                         self._set_torrent_info(service=service, _hash=_hash, _tags=torrent_sites,
@@ -361,12 +371,25 @@ class DownloadSiteTag(_PluginBase):
             return
         downloader_obj = service.instance
         # 下载器api不通用, 因此需分开处理
-        if service.type == "qbittorrent" and _original_tags:
-            # 去除种子已经存在的标签
-            _tags = list(set(_tags) - set(_original_tags))
+        if _original_tags:
+            if self._cover:
+                if service.type == "qbittorrent":
+                    downloader_obj.remove_torrents_tag(ids=_hash, tags=_original_tags)
+                    downloader_obj.set_torrents_tag(ids=_hash, tags=_tags)
+                else:
+                    downloader_obj.set_torrent_tag(ids=_hash, tags=_tags)
+            else:
+                if service.type == "qbittorrent":
+                    _tags = list(set(_tags) - set(_original_tags))
+                    downloader_obj.set_torrents_tag(ids=_hash, tags=_tags)
+                else:
+                    _tags = list(set(_original_tags).union(set(_tags)))
+                    downloader_obj.set_torrent_tag(ids=_hash, tags=_tags)
         else:
-            _tags = list(set(_original_tags).union(set(_tags)))
-        downloader_obj.set_torrent_tag(ids=_hash, tags=_tags)
+            if service.type == "qbittorrent":
+                downloader_obj.set_torrents_tag(ids=_hash, tags=_tags)
+            else:
+                downloader_obj.set_torrent_tag(ids=_hash, tags=_tags)
         logger.warn(f"{self.LOG_TAG}下载器: {service.name} 种子id: {_hash} {('  标签: ' + ','.join(_tags)) if _tags else ''}")
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
@@ -383,7 +406,7 @@ class DownloadSiteTag(_PluginBase):
                             {
                                 'component': 'VCol',
                                 'props': {
-                                    'cols': 6
+                                    'cols': 3
                                 },
                                 'content': [
                                     {
@@ -398,7 +421,37 @@ class DownloadSiteTag(_PluginBase):
                             {
                                 'component': 'VCol',
                                 'props': {
-                                    'cols': 6
+                                    'cols': 3
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VSwitch',
+                                        'props': {
+                                            'model': 'cover',
+                                            'label': '覆盖模式',
+                                        }
+                                    }
+                                ]
+                            },
+                            {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 3
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VSwitch',
+                                        'props': {
+                                            'model': 'site_first',
+                                            'label': '站点优先',
+                                        }
+                                    }
+                                ]
+                            },
+                            {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 3
                                 },
                                 'content': [
                                     {
@@ -587,6 +640,8 @@ class DownloadSiteTag(_PluginBase):
         ], {
             "enabled": False,
             "onlyonce": False,
+            "cover": False,
+            "site_first": False,
             "interval": "计划任务",
             "interval_cron": "0 12 * * *",
             "interval_time": "24",

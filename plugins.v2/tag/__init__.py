@@ -118,6 +118,13 @@ class Tag(_PluginBase):
 
     def get_state(self) -> bool:
         return self._enabled
+    
+    @staticmethod
+    def get_command() -> List[Dict[str, Any]]:
+        pass
+
+    def get_api(self) -> List[Dict[str, Any]]:
+        pass
 
     def get_service(self) -> List[Dict[str, Any]]:
         """
@@ -576,6 +583,9 @@ class Tag(_PluginBase):
             "tracker_map": "tracker地址:站点标签",
             "save_path_map": "保存地址:标签"
         }
+    
+    def get_page(self) -> List[dict]:
+        pass
 
     def stop_service(self):
         try:

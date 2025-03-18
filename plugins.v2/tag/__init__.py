@@ -228,10 +228,6 @@ class DownloadSiteTag(_PluginBase):
                     # 获取种子当前标签
                     torrent_tags = self._get_label(torrent=torrent, dl_type=service.type)
                     torrent_sites = []
-                    for key, label in save_path_map.items():
-                        if key in _path:
-                            torrent_sites.append(label)
-                            break
                     # 如果标签已经存在任意站点, 则不再添加站点标签
                     if not indexers.intersection(set(torrent_tags)):
                         site = None
@@ -249,6 +245,10 @@ class DownloadSiteTag(_PluginBase):
                             if site:
                                 torrent_sites.append(site)
                                 break
+                    for key, label in save_path_map.items():
+                        if key in _path:
+                            torrent_sites.append(label)
+                            break
                     # 因允许torrent_sites为空时运行到此, 因此需要判断torrent_sites不为空
                     if torrent_sites:
                         self._set_torrent_info(service=service, _hash=_hash, _tags=torrent_sites,

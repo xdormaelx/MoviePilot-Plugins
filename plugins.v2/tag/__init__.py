@@ -22,7 +22,7 @@ class Tag(_PluginBase):
     # 插件图标
     plugin_icon = "Youtube-dl_B.png"
     # 插件版本
-    plugin_version = "1.1"
+    plugin_version = "1.2"
     # 插件作者
     plugin_author = "ClarkChen"
     # 作者主页
@@ -118,7 +118,7 @@ class Tag(_PluginBase):
 
     def get_state(self) -> bool:
         return self._enabled
-    
+
     @staticmethod
     def get_command() -> List[Dict[str, Any]]:
         pass
@@ -311,7 +311,7 @@ class Tag(_PluginBase):
         if _original_tags:
             if self._cover:
                 if service.type == "qbittorrent":
-                    downloader_obj.remove_torrents_tag(ids=_hash, tags=_original_tags)
+                    downloader_obj.remove_torrents_tag(ids=_hash)
                     downloader_obj.set_torrents_tag(ids=_hash, tags=_tags)
                 else:
                     downloader_obj.set_torrent_tag(ids=_hash, tags=_tags)
@@ -583,7 +583,7 @@ class Tag(_PluginBase):
             "tracker_map": "tracker地址:站点标签",
             "save_path_map": "保存地址:标签"
         }
-    
+
     def get_page(self) -> List[dict]:
         pass
 

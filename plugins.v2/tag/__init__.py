@@ -22,7 +22,7 @@ class Tag(_PluginBase):
     # 插件图标
     plugin_icon = "Youtube-dl_B.png"
     # 插件版本
-    plugin_version = "1.2"
+    plugin_version = "1.1"
     # 插件作者
     plugin_author = "ClarkChen"
     # 作者主页
@@ -81,12 +81,11 @@ class Tag(_PluginBase):
             self._onlyonce = False
             config.update({"onlyonce": self._onlyonce})
             self.update_config(config)
-            # 补全站点标签
+            # 启动自动标签
             self._scheduler.add_job(func=self._complemented_tags, trigger='date',
                                     run_date=datetime.datetime.now(
                                         tz=pytz.timezone(settings.TZ)) + datetime.timedelta(seconds=3)
                                     )
-
             if self._scheduler and self._scheduler.get_jobs():
                 # 启动服务
                 self._scheduler.print_jobs()
@@ -217,8 +216,7 @@ class Tag(_PluginBase):
             for torrent in torrents:
                 try:
                     if self._event.is_set():
-                        logger.info(
-                            f"{self.LOG_TAG}停止服务")
+                        logger.info(f"{self.LOG_TAG}停止服务")
                         return
                     # 获取种子hash
                     _hash = self._get_hash(torrent=torrent, dl_type=service.type)
@@ -227,16 +225,23 @@ class Tag(_PluginBase):
                     if not _hash or not _path:
                         continue
                     torrent_labels = []
-                    if self._site_first:
-                        for key, label in save_path_map.items():
-                            if key in _path:
-                                torrent_labels.append(label)
-                                break
+                    for key, label in save_path_map.items():
+                        if key in _path:
+                            torrent_labels.append(label)
+                            break
                     site = None
                     torrent_tags = None
-                    if not self._cover:
+                    if service.type == "qbittorrent":
                         torrent_tags = self._get_tags(torrent=torrent, dl_type=service.type)
-                        site = indexers.intersection(set(torrent_tags))
+                        if self._cover:
+                            downloader_obj.delete_torrents_tag(ids= None, tags=torrent_tags)
+                            torrent_tags = None
+                        else:
+                            site = indexers.intersection(set(torrent_tags))
+                    else:
+                        if not self._cover:
+                            torrent_tags = self._get_tags(torrent=torrent, dl_type=service.type)
+                            site = indexers.intersection(set(torrent_tags))
                     if not site:
                         trackers = self._get_trackers(torrent=torrent, dl_type=service.type)
                         for tracker in trackers:
@@ -252,14 +257,8 @@ class Tag(_PluginBase):
                             if site:
                                 torrent_labels.append(site)
                                 break
-                    if not self._site_first:
-                        for key, label in save_path_map.items():
-                            if key in _path:
-                                torrent_labels.append(label)
-                                break
                     if torrent_labels:
-                        self._set_torrent_info(service=service, _hash=_hash, _tags=torrent_labels,
-                                               _original_tags=torrent_tags)
+                        self._set_torrent_info(service=service, _hash=_hash, _tags=torrent_labels, _original_tags=torrent_tags)
                 except Exception as e:
                     logger.error(
                         f"{self.LOG_TAG}分析种子信息时发生了错误: {str(e)}")
@@ -285,11 +284,9 @@ class Tag(_PluginBase):
     def _get_trackers(torrent: Any, dl_type: str):
         try:
             if dl_type == "qbittorrent":
-                return [tracker.get("url") for tracker in (torrent.trackers or []) if
-                        tracker.get("tier", -1) >= 0 and tracker.get("url")]
+                return [tracker.get("url") for tracker in (torrent.trackers or []) if tracker.get("tier", -1) >= 0 and tracker.get("url")]
             else:
-                return [tracker.announce for tracker in (torrent.trackers or []) if
-                        tracker.tier >= 0 and tracker.announce]
+                return [tracker.announce for tracker in (torrent.trackers or []) if tracker.tier >= 0 and tracker.announce]
         except Exception as e:
             print(str(e))
             return []
@@ -309,24 +306,18 @@ class Tag(_PluginBase):
         downloader_obj = service.instance
         # 下载器api不通用, 因此需分开处理
         if _original_tags:
-            if self._cover:
-                if service.type == "qbittorrent":
-                    downloader_obj.remove_torrents_tag(ids=_hash)
-                    downloader_obj.set_torrents_tag(ids=_hash, tags=_tags)
-                else:
-                    downloader_obj.set_torrent_tag(ids=_hash, tags=_tags)
+            if service.type == "qbittorrent":
+                _tags = list(set(_tags) - set(_original_tags))
+                downloader_obj.set_torrents_tag(ids=_hash, tags=_tags)
             else:
-                if service.type == "qbittorrent":
-                    _tags = list(set(_tags) - set(_original_tags))
-                    downloader_obj.set_torrents_tag(ids=_hash, tags=_tags)
-                else:
-                    _tags = list(set(_original_tags).union(set(_tags)))
-                    downloader_obj.set_torrent_tag(ids=_hash, tags=_tags)
+                downloader_obj.set_torrent_tag(ids=_hash, tags=_tags, org_tags=_original_tags)
         else:
             if service.type == "qbittorrent":
                 downloader_obj.set_torrents_tag(ids=_hash, tags=_tags)
             else:
-                downloader_obj.set_torrent_tag(ids=_hash, tags=_tags)
+                if self._site_first:
+                    _tags = _tags[::-1]
+                downloader_obj.trc.change_torrent(ids=_hash,labels=_tags)
         logger.warn(f"{self.LOG_TAG}下载器: {service.name} 种子id: {_hash} {('  标签: ' + ','.join(_tags)) if _tags else ''}")
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:

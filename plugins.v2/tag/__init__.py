@@ -231,15 +231,16 @@ class DownloadSiteTag(_PluginBase):
                         continue
                     # 获取种子当前标签
                     torrent_tags = self._get_label(torrent=torrent, dl_type=service.type)
-                    torrent_sites = []
+                    torrent_labels = []
                     if self._site_first:
                         for key, label in save_path_map.items():
                             if key in _path:
-                                torrent_sites.append(label)
+                                torrent_labels.append(label)
                                 break
-                    # 如果标签已经存在任意站点, 则不再添加站点标签
-                    if not indexers.intersection(set(torrent_tags)):
-                        site = None
+                    site = None
+                    if not self._cover:
+                        site = indexers.intersection(set(torrent_tags))
+                    if not site:
                         trackers = self._get_trackers(torrent=torrent, dl_type=service.type)
                         for tracker in trackers:
                             for key, label in tracker_map.items():
@@ -252,16 +253,15 @@ class DownloadSiteTag(_PluginBase):
                                 if site_info:
                                     site = site_info.get("name")
                             if site:
-                                torrent_sites.append(site)
+                                torrent_labels.append(site)
                                 break
                     if not self._site_first:
                         for key, label in save_path_map.items():
                             if key in _path:
-                                torrent_sites.append(label)
+                                torrent_labels.append(label)
                                 break
-                    # 因允许torrent_sites为空时运行到此, 因此需要判断torrent_sites不为空
-                    if torrent_sites:
-                        self._set_torrent_info(service=service, _hash=_hash, _tags=torrent_sites,
+                    if torrent_labels:
+                        self._set_torrent_info(service=service, _hash=_hash, _tags=torrent_labels,
                                                _original_tags=torrent_tags)
                 except Exception as e:
                     logger.error(

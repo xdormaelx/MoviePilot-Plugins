@@ -14,7 +14,7 @@ from app.schemas import ServiceInfo
 from app.utils.string import StringUtils
 
 
-class DownloadSiteTag(_PluginBase):
+class Tag(_PluginBase):
     # 插件名称
     plugin_name = "自动标签"
     # 插件描述

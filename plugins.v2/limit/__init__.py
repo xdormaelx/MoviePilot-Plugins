@@ -221,12 +221,10 @@ class Limit(_PluginBase):
                     _hash = self._get_hash(torrent=torrent, dl_type=service.type)
                     # 获取种子当前标签
                     torrent_tags = self._get_tags(torrent=torrent, dl_type=service.type)
-                    if not _hash or not torrent_tags:
-                        continue
                     for tag in torrent_tags:
                         if tag in tag_map:
                             speed = tag_map[tag]
-                            self._set_torrent_speed(service=service, _hash=_hash, _speed=speed)
+                            self._set_torrent_speed(service=service, _hash= _hash, _speed= speed)
                             break
                 except Exception as e:
                     logger.error(
@@ -236,7 +234,7 @@ class Limit(_PluginBase):
     @staticmethod
     def _get_hash(torrent: Any, dl_type: str):
         try:
-            return torrent.get("hash") if dl_type == "qbittorrent" else torrent.hashString
+            return torrent.get("hash") if dl_type == "qbittorrent" else torrent.id
         except Exception as e:
             print(str(e))
             return ""
@@ -256,7 +254,7 @@ class Limit(_PluginBase):
         downloader_obj = service.instance
         # 下载器api不通用, 因此需分开处理
         if service.type == "qbittorrent":
-            downloader_obj.qbc.torrents_set_upload_limit(torrent_hashes=_hash,limit=_speed)
+            downloader_obj.qbc.torrents_set_upload_limit(torrent_hashes= _hash,limit= _speed)
         else:
             downloader_obj.change_torrent(hash_string= _hash,upload_limit= _speed)
         logger.warn(f"{self.LOG_TAG}下载器: {service.name} 种子id: {_hash}  上传限速为 {_speed}KB/S")

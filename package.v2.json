@@ -21,7 +21,7 @@
         "v1.1": "新增两个模式"
     }
   },
-    "Limit": {
+  "Limit": {
     "name": "自动限速",
     "description": "给qb、tr的下载任务限速",
     "labels": "下载管理",

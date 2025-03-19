@@ -21,7 +21,7 @@ class Limit(_PluginBase):
     # 插件图标
     plugin_icon = "Youtube-dl_A.png"
     # 插件版本
-    plugin_version = "1.0"
+    plugin_version = "1.1"
     # 插件作者
     plugin_author = "ClarkChen"
     # 作者主页
@@ -399,7 +399,7 @@ class Limit(_PluginBase):
                                         'props': {
                                             'model': 'interval_cron',
                                             'label': '计划任务设置',
-                                            'placeholder': '0 12 * * *'
+                                            'placeholder': '0 13 * * *'
                                         }
                                     }
                                 ]
@@ -457,7 +457,6 @@ class Limit(_PluginBase):
                                         "props": {
                                             "model": "global_speed",
                                             "label": "全局限速(KB)",
-                                            "rows": 5,
                                             "placeholder": "如:100",
                                         },
                                     }
@@ -516,7 +515,7 @@ class Limit(_PluginBase):
             "cover": False,
             "global": False,
             "interval": "计划任务",
-            "interval_cron": "0 12 * * *",
+            "interval_cron": "0 13 * * *",
             "interval_time": "24",
             "interval_unit": "小时",
             "global_speed": "全局限速",

@@ -3,7 +3,6 @@ import threading
 from typing import List, Tuple, Dict, Any, Optional
 
 import pytz
-from app.helper.sites import SitesHelper
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from app.core.config import settings
@@ -21,7 +20,7 @@ class Limit(_PluginBase):
     # 插件图标
     plugin_icon = "Youtube-dl_A.png"
     # 插件版本
-    plugin_version = "1.1.1"
+    plugin_version = "1.1.2"
     # 插件作者
     plugin_author = "ClarkChen"
     # 作者主页
@@ -50,11 +49,10 @@ class Limit(_PluginBase):
     _interval_time = 24
     _interval_unit = "小时"
     _downloaders = None
-    _global_speed = "全局限速"
+    _global_speed = 0
     _tag_map = "标签:限速(KB)"
 
     def init_plugin(self, config: dict = None):
-        self.sites_helper = SitesHelper()
         self.downloader_helper = DownloaderHelper()
         # 读取配置
         if config:
@@ -211,7 +209,7 @@ class Limit(_PluginBase):
                 continue
             logger.info(f"{self.LOG_TAG}下载器 {downloader} 分析种子信息中 ...")
             for torrent in torrents:
-                if self.get_limited(service=service, _torrent=torrent) and not self._cover:
+                if self._get_limited(torrent=torrent, dl_type=service.type) and not self._cover:
                     continue
                 try:
                     if self._event.is_set():
@@ -234,7 +232,7 @@ class Limit(_PluginBase):
     @staticmethod
     def _get_hash(torrent: Any, dl_type: str):
         try:
-            return torrent.get("hash") if dl_type == "qbittorrent" else torrent.id
+            return torrent.get("hash") if dl_type == "qbittorrent" else torrent.hashString
         except Exception as e:
             print(str(e))
             return ""
@@ -248,6 +246,14 @@ class Limit(_PluginBase):
             print(str(e))
             return []
 
+    @staticmethod
+    def _get_limited(torrent: Any, dl_type: str):
+        try:
+            return torrent.up_limit > 0 if dl_type == "qbittorrent" else torrent.upload_limited
+        except Exception as e:
+            print(str(e))
+            return False
+
     def _set_torrent_speed(self, service: ServiceInfo, _hash: str, _speed: int = None):
         if not service or not service.instance:
             return
@@ -258,13 +264,6 @@ class Limit(_PluginBase):
         else:
             downloader_obj.change_torrent(hash_string= _hash,upload_limit= _speed)
         logger.warn(f"{self.LOG_TAG}下载器: {service.name} 种子id: {_hash}  上传限速为 {_speed}KB/S")
-
-
-    def get_limited(self, service: ServiceInfo, _torrent):
-        if service.type == "qbittorrent":
-            return _torrent.up_limit > 0
-        else:
-            return _torrent.upload_limit
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         return [
@@ -516,7 +515,7 @@ class Limit(_PluginBase):
             "interval_cron": "0 13 * * *",
             "interval_time": "24",
             "interval_unit": "小时",
-            "global_speed": "全局限速",
+            "global_speed": "0",
             "tag_map": "标签:限速(KB)"
         }
 

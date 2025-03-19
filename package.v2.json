@@ -12,7 +12,7 @@
     "name": "自动标签",
     "description": "给qb、tr的下载任务贴标签(支持自定义)",
     "labels": "下载管理",
-    "version": "1.2",
+    "version": "1.2.1",
     "icon": "Youtube-dl_B.png",
     "author": "ClarkChen",
     "level": 2,

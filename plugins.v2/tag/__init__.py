@@ -22,7 +22,7 @@ class Tag(_PluginBase):
     # 插件图标
     plugin_icon = "Youtube-dl_B.png"
     # 插件版本
-    plugin_version = "1.2"
+    plugin_version = "1.2.1"
     # 插件作者
     plugin_author = "ClarkChen"
     # 作者主页
@@ -234,7 +234,7 @@ class Tag(_PluginBase):
                     if service.type == "qbittorrent":
                         torrent_tags = self._get_tags(torrent=torrent, dl_type=service.type)
                         if self._cover:
-                            downloader_obj.qbc.torrents_delete_tags(tags=torrent_tags)
+                            downloader_obj.qbc.torrents_remove_tags(torrent_hashes= _hash,tags= torrent_tags)
                             torrent_tags = None
                         else:
                             site = indexers.intersection(set(torrent_tags))

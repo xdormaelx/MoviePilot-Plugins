@@ -234,7 +234,7 @@ class Tag(_PluginBase):
                     if service.type == "qbittorrent":
                         torrent_tags = self._get_tags(torrent=torrent, dl_type=service.type)
                         if self._cover:
-                            downloader_obj.delete_torrents_tag(ids= None, tags=torrent_tags)
+                            downloader_obj.qbc.torrents_delete_tags(tags=torrent_tags)
                             torrent_tags = None
                         else:
                             site = indexers.intersection(set(torrent_tags))

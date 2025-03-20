@@ -19,7 +19,7 @@ class HA(_PluginBase):
     # 插件图标
     plugin_icon = "https://github.com/aClarkChen/MoviePilot-Plugins/blob/main/icons/ha.png?raw=true"
     # 插件版本
-    plugin_version = "1.0.1"
+    plugin_version = "1.0.2"
     # 插件作者
     plugin_author = "ClarkChen"
     # 作者主页
@@ -72,13 +72,21 @@ class HA(_PluginBase):
     def get_api(self) -> List[Dict[str, Any]]:
         pass
 
-    @eventmanager.register(EventType.WebhookMessage)
+    @eventmanager.register(EventType.UserMessage)
     def get(self, event: Event):
+        logger.info(f"收到UserMessage消息")
         if not self.get_state() or not event.event_data:
             return
         msg_body = event.event_data
         logger.info(f"消息为:{msg_body}")
-
+        
+    @eventmanager.register(EventType.WebhookMessage)
+    def get(self, event: Event):
+        logger.info(f"收到WebhookMessage消息")
+        if not self.get_state() or not event.event_data:
+            return
+        msg_body = event.event_data
+        logger.info(f"消息为:{msg_body}")
 
     @eventmanager.register(EventType.NoticeMessage)
     def send(self, event: Event):

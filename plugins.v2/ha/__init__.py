@@ -19,7 +19,7 @@ class HA(_PluginBase):
     # 插件图标
     plugin_icon = "https://github.com/aClarkChen/MoviePilot-Plugins/blob/main/icons/ha.png?raw=true"
     # 插件版本
-    plugin_version = "1.0"
+    plugin_version = "1.0.1"
     # 插件作者
     plugin_author = "ClarkChen"
     # 作者主页
@@ -36,7 +36,7 @@ class HA(_PluginBase):
     _enabled = False
     _notify = False
     _get_dir = ""
-    _msg_type = None
+    _msg_type = []
 
     # 消息处理线程
     processing_thread = None
@@ -54,7 +54,7 @@ class HA(_PluginBase):
             self._enabled = config.get("enabled")
             self._notify = config.get("notify")
             self._get_dir = config.get("get_dir")
-            self._msg_type = config.get("msg_type")
+            self._msg_type = config.get("msg_type") or []
 
             if self._enabled and self._get_dir:
                 # 启动处理队列的后台线程
@@ -216,52 +216,12 @@ class HA(_PluginBase):
                                     {
                                         'component': 'VSelect',
                                         'props': {
-                                            'multiple': False,
+                                            'multiple': True,
                                             'chips': True,
                                             'model': 'msg_type',
                                             'label': '消息类型',
-                                            'items': MsgTypeOptions,
-                                            'hint': '如不选择，消息类型默认为[手动处理]。',
-                                            'persistent-hint': True
+                                            'items': MsgTypeOptions
                                         }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                },
-                                'content': [
-                                    {
-                                        'component': 'VAlert',
-                                        'props': {
-                                            'type': 'success',
-                                            'variant': 'tonal'
-                                        },
-                                        'content': [
-                                            {
-                                                'component': 'div',
-                                                'content': [
-                                                    {
-                                                        'component': 'span',
-                                                        'text': 'GET_API接口地址：http://moviepilot_ip:port/api/v1/plugin/MsgNotify/send_form?apikey=api_token'
-                                                    },
-                                                    {
-                                                        'component': 'br'
-                                                    },
-                                                    {
-                                                        'component': 'span',
-                                                        'text': 'POST_API接口地址：http://moviepilot_ip:port/api/v1/plugin/MsgNotify/send_json?apikey=api_token'
-                                                    }
-                                                ]
-                                            }
-                                        ]
                                     }
                                 ]
                             }
@@ -273,7 +233,7 @@ class HA(_PluginBase):
                 "enabled": False,
                 "notify": False,
                 "get_dir": "",
-                "msg_type": ""
+                "msg_type": []
             }
         )
 

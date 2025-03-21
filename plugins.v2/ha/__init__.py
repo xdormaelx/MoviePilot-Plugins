@@ -19,7 +19,7 @@ class HA(_PluginBase):
     # 插件图标
     plugin_icon = "https://github.com/aClarkChen/MoviePilot-Plugins/blob/main/icons/ha.png?raw=true"
     # 插件版本
-    plugin_version = "1.0.4"
+    plugin_version = "1.0.5"
     # 插件作者
     plugin_author = "ClarkChen"
     # 作者主页
@@ -72,19 +72,14 @@ class HA(_PluginBase):
     def get_api(self) -> List[Dict[str, Any]]:
         return [{
             "path": "/webhook",
-            "endpoint": self.get,
-            "methods": ["GET"],
-            "summary": "群辉webhook",
-            "description": "接受群辉webhook通知并推送",
+            "endpoint": self.post,
+            "methods": ["POST"],
+            "summary": "HA的webhook",
+            "description": "接受HA的webhook通知并推送",
         }]
 
-    def get(self, text: str) -> schemas.Response:
+    def post(self, title: str, text: str) -> schemas.Response:
         logger.info(f"收到webhook消息啦。。。  {text}")
-        if self._enabled and self._notify:
-            mtype = NotificationType.Manual
-            self.post_message(title="群辉通知",
-                              mtype=mtype,
-                              text=text)
         return schemas.Response(
             success=True,
             message="发送成功"

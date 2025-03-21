@@ -3,7 +3,7 @@
       "name": "HA助手",
       "description": "与HA联动",
       "labels": "消息通知",
-      "version": "1.0.3",
+      "version": "1.0.4",
       "icon": "https://github.com/aClarkChen/MoviePilot-Plugins/blob/main/icons/ha.png?raw=true",
       "author": "ClarkChen",
       "level": 2

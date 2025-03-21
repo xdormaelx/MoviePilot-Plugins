@@ -7,9 +7,9 @@ from typing import Any, List, Dict, Tuple
 from app.log import logger
 from app.plugins import _PluginBase
 from app.utils.http import RequestUtils
+from app.schemas import WebhookEventInfo
 from app.core.event import eventmanager, Event
-from app.schemas.types import EventType, NotificationType
-
+from app.schemas.types import EventType, MediaType, MediaImageType, NotificationType
 
 class HA(_PluginBase):
     # 插件名称
@@ -19,7 +19,7 @@ class HA(_PluginBase):
     # 插件图标
     plugin_icon = "https://github.com/aClarkChen/MoviePilot-Plugins/blob/main/icons/ha.png?raw=true"
     # 插件版本
-    plugin_version = "1.0.2"
+    plugin_version = "1.0.3"
     # 插件作者
     plugin_author = "ClarkChen"
     # 作者主页
@@ -73,20 +73,64 @@ class HA(_PluginBase):
         pass
 
     @eventmanager.register(EventType.UserMessage)
-    def get(self, event: Event):
-        logger.info(f"收到UserMessage消息")
-        if not self.get_state() or not event.event_data:
+    def get_user_msg(self, event: Event):
+        logger.warn(f"收到UserMessage消息")
+        if not self._enabled or not event.event_data:
             return
         msg_body = event.event_data
-        logger.info(f"消息为:{msg_body}")
-        
+        logger.warn(f"消息为:{msg_body}")
+
     @eventmanager.register(EventType.WebhookMessage)
-    def get(self, event: Event):
-        logger.info(f"收到WebhookMessage消息")
-        if not self.get_state() or not event.event_data:
+    def get_webhook_msg(self, event: Event):
+        logger.warn(f"收到WebhookMessage消息")
+        if not self._enabled or not event.event_data:
             return
         msg_body = event.event_data
-        logger.info(f"消息为:{msg_body}")
+        logger.warn(f"消息为:{msg_body}")
+        return
+
+        event_info = event.event_data
+        expiring_key = f"{event_info.item_id}-{event_info.client}-{event_info.user_name}"
+
+        # 消息标题
+        if event_info.item_type in ["TV", "SHOW"]:
+            message_title = f"剧集 {event_info.item_name}"
+        elif event_info.item_type == "MOV":
+            message_title = f"电影 {event_info.item_name}"
+        elif event_info.item_type == "AUD":
+            message_title = f"有声书 {event_info.item_name}"
+        else:
+            message_title = event_info.item_name
+
+        # 消息内容
+        message_texts = []
+        if event_info.user_name:
+            message_texts.append(f"用户：{event_info.user_name}")
+
+        # 消息内容
+        message_content = "\n".join(message_texts)
+
+        # 消息图片
+        image_url = event_info.image_url
+        # 查询剧集图片
+        if (event_info.tmdb_id
+                and event_info.season_id
+                and event_info.episode_id):
+            specific_image = self.chain.obtain_specific_image(
+                mediaid=event_info.tmdb_id,
+                mtype=MediaType.TV,
+                image_type=MediaImageType.Backdrop,
+                season=event_info.season_id,
+                episode=event_info.episode_id
+            )
+            if specific_image:
+                image_url = specific_image
+        # 不使用图片
+        if not image_url:
+            image_url = None
+
+        # 发送消息
+        self.post_message(title=message_title, text=message_content, image=image_url)
 
     @eventmanager.register(EventType.NoticeMessage)
     def send(self, event: Event):

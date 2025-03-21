@@ -6,10 +6,15 @@ from typing import Any, List, Dict, Tuple
 
 from app import schemas
 from app.log import logger
+from pydantic import BaseModel
 from app.plugins import _PluginBase
 from app.utils.http import RequestUtils
 from app.core.event import eventmanager, Event
 from app.schemas.types import EventType, NotificationType
+
+class NotifyRequest(BaseModel):
+    title: str
+    text: str
 
 class HA(_PluginBase):
     # 插件名称
@@ -19,7 +24,7 @@ class HA(_PluginBase):
     # 插件图标
     plugin_icon = "https://github.com/aClarkChen/MoviePilot-Plugins/blob/main/icons/ha.png?raw=true"
     # 插件版本
-    plugin_version = "1.0.5"
+    plugin_version = "1.0.6"
     # 插件作者
     plugin_author = "ClarkChen"
     # 作者主页
@@ -78,8 +83,10 @@ class HA(_PluginBase):
             "description": "接受HA的webhook通知并推送",
         }]
 
-    def post(self, title: str, text: str) -> schemas.Response:
-        logger.info(f"收到webhook消息啦。。。  {text}")
+    def post(self, request: NotifyRequest) -> schemas.Response:
+        title = request.title
+        text = request.text
+        logger.info(f"收到以下消息:\n{title}\n{text}")
         return schemas.Response(
             success=True,
             message="发送成功"

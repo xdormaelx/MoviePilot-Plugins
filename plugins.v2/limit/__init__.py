@@ -20,7 +20,7 @@ class Limit(_PluginBase):
     # 插件图标
     plugin_icon = "Youtube-dl_A.png"
     # 插件版本
-    plugin_version = "1.1.3"
+    plugin_version = "1.1.4"
     # 插件作者
     plugin_author = "ClarkChen"
     # 作者主页
@@ -65,7 +65,7 @@ class Limit(_PluginBase):
             self._interval_time = self.str_to_number(config.get("interval_time"), 24)
             self._interval_unit = config.get("interval_unit") or "小时"
             self._downloaders = config.get("downloaders")
-            self._global_speed = self.str_to_number(config.get("global_speed"), 0) or "全局限速(KB)"
+            self._global_speed = self.str_to_number(config.get("global_speed"), 0)
             self._tag_map = config.get("tag_map") or "标签:限速(KB)"
 
         # 停止现有任务

@@ -20,7 +20,7 @@ class Limit(_PluginBase):
     # 插件图标
     plugin_icon = "Youtube-dl_A.png"
     # 插件版本
-    plugin_version = "1.1.2"
+    plugin_version = "1.1.3"
     # 插件作者
     plugin_author = "ClarkChen"
     # 作者主页
@@ -189,7 +189,7 @@ class Limit(_PluginBase):
                 continue
             # 全局限速
             if self._global:
-                downloader_obj.set_speed_limit(upload_limit=int(self._global_speed))
+                downloader_obj.set_speed_limit(download_limit=0, upload_limit=self._global_speed)
             # 按标签限速
             if not self._tag_map:
                 continue
@@ -209,7 +209,7 @@ class Limit(_PluginBase):
                 continue
             logger.info(f"{self.LOG_TAG}下载器 {downloader} 分析种子信息中 ...")
             for torrent in torrents:
-                if self._get_limited(torrent=torrent, dl_type=service.type) and not self._cover:
+                if torrent.up_limit > 0 and not self._cover:
                     continue
                 try:
                     if self._event.is_set():
@@ -245,14 +245,6 @@ class Limit(_PluginBase):
         except Exception as e:
             print(str(e))
             return []
-
-    @staticmethod
-    def _get_limited(torrent: Any, dl_type: str):
-        try:
-            return torrent.up_limit > 0 if dl_type == "qbittorrent" else torrent.upload_limited
-        except Exception as e:
-            print(str(e))
-            return False
 
     def _set_torrent_speed(self, service: ServiceInfo, _hash: str, _speed: int = None):
         if not service or not service.instance:
@@ -454,6 +446,7 @@ class Limit(_PluginBase):
                                         "props": {
                                             "model": "global_speed",
                                             "label": "全局限速(KB)",
+                                            "rows": 1,
                                             "placeholder": "如:100",
                                         },
                                     }

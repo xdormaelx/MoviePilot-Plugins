@@ -170,15 +170,8 @@ class HA(_PluginBase):
             try:
                 res = RequestUtils().post_res(url=self._get_dir, data=data)
                 if res and res.status_code == 200:
-                    ret_json = res.json()
-                    errno = ret_json.get('errcode')
-                    error = ret_json.get('errmsg')
-                    if errno == 0:
-                        logger.info("HA消息发送成功")
-                        # 更新上次发送时间
-                        self.last_send_time = time()
-                    else:
-                        logger.warn(f"HA消息发送失败，错误码：{errno}，错误原因：{error}")
+                    logger.info("HA消息发送成功")
+                    self.last_send_time = time()
                 elif res is not None:
                     logger.warn(f"HA消息发送失败，错误码：{res.status_code}，错误原因：{res.reason}")
                 else:

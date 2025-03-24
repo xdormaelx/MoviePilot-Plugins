@@ -29,5 +29,14 @@
     "icon": "Youtube-dl_A.png",
     "author": "ClarkChen",
     "level": 2
-  }
+  },
+  "Delete": {
+    "name": "自动删除",
+    "description": "删除qb、tr中tracker长期无法访问的下载任务",
+    "labels": "下载管理",
+    "version": "1.0",
+    "icon": "Youtube-dl_C.png",
+    "author": "ClarkChen",
+    "level": 2
+  },
 }

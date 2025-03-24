@@ -20,7 +20,7 @@ class Limit(_PluginBase):
     # 插件图标
     plugin_icon = "Youtube-dl_A.png"
     # 插件版本
-    plugin_version = "1.1.4"
+    plugin_version = "1.1.5"
     # 插件作者
     plugin_author = "ClarkChen"
     # 作者主页
@@ -209,20 +209,24 @@ class Limit(_PluginBase):
                 continue
             logger.info(f"{self.LOG_TAG}下载器 {downloader} 分析种子信息中 ...")
             for torrent in torrents:
-                if torrent.up_limit > 0 and not self._cover:
-                    continue
+                if service.type == "qbittorrent":
+                    if not self._cover and torrent.up_limit > 0:
+                        continue
                 try:
                     if self._event.is_set():
                         logger.info(f"{self.LOG_TAG}停止服务")
                         return
                     # 获取种子hash
-                    _hash = self._get_hash(torrent=torrent, dl_type=service.type)
+                    hash = self._get_hash(torrent=torrent, dl_type=service.type)
+                    if service.type == "transmission":
+                        if not self._cover and downloader_obj.trc.get_torrent(torrent_id=hash).upload_limited:
+                            continue
                     # 获取种子当前标签
                     torrent_tags = self._get_tags(torrent=torrent, dl_type=service.type)
                     for tag in torrent_tags:
                         if tag in tag_map:
                             speed = tag_map[tag]
-                            self._set_torrent_speed(service=service, _hash= _hash, _speed= speed)
+                            self._set_torrent_speed(service=service, _hash=hash, _speed=speed)
                             break
                 except Exception as e:
                     logger.error(
@@ -240,8 +244,7 @@ class Limit(_PluginBase):
     @staticmethod
     def _get_tags(torrent: Any, dl_type: str):
         try:
-            return [str(tag).strip() for tag in torrent.get("tags", "").split(',')] \
-                if dl_type == "qbittorrent" else torrent.labels or []
+            return [str(tag).strip() for tag in torrent.get("tags", "").split(',')] if dl_type == "qbittorrent" else torrent.labels or []
         except Exception as e:
             print(str(e))
             return []
@@ -252,9 +255,9 @@ class Limit(_PluginBase):
         downloader_obj = service.instance
         # 下载器api不通用, 因此需分开处理
         if service.type == "qbittorrent":
-            downloader_obj.qbc.torrents_set_upload_limit(torrent_hashes= _hash,limit= _speed)
+            downloader_obj.qbc.torrents_set_upload_limit(torrent_hashes=_hash,limit=_speed)
         else:
-            downloader_obj.change_torrent(hash_string= _hash,upload_limit= _speed)
+            downloader_obj.change_torrent(hash_string=_hash,upload_limit=_speed)
         logger.warn(f"{self.LOG_TAG}下载器: {service.name} 种子id: {_hash}  上传限速为 {_speed}KB/S")
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:

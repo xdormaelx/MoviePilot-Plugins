@@ -54,7 +54,7 @@ class Delete(_PluginBase):
     _downloaders = None
     _tag_map = "忽略标签"
     _old_config = {}
-    _new_config = {}
+    _new_config = ''
 
     the_config = Path(__file__).parent / "config/config.ini"
 
@@ -73,7 +73,7 @@ class Delete(_PluginBase):
             self._downloaders = config.get("downloaders")
             self._tag_map = config.get("tag_map") or "忽略标签"
             self._old_config = {}
-            self._new_config = {}
+            self._new_config = ''
 
         if self._enabled:
             self._config = config.get("config", self.the_config.read_text(encoding="utf-8"))
@@ -217,6 +217,7 @@ class Delete(_PluginBase):
                         self._check(service=service, torrent=torrent)
                 except Exception as e:
                     logger.error(f"{self.LOG_TAG}分析种子信息时发生了错误: {str(e)}")
+        self.the_config.write_text(self._new_config[:-1], encoding="utf-8")
         logger.info(f"{self.LOG_TAG}执行完成")
 
     def _check(self, service: ServiceInfo, torrent):
@@ -252,10 +253,10 @@ class Delete(_PluginBase):
                 except ValueError:
                     logger.warn(f"{self.LOG_TAG}下载器: {service.name} 种子删除失败")
             else:
-                self._new_config[hash] = f'{name}:{time}:{hash}'
+                self._new_config += f'{name}:{time}:{hash}\n'
                 logger.warn(f"{self.LOG_TAG}下载器: {service.name} 种子: {name} 已失联{time}次, 持续记录中")
         else:
-            self._new_config[hash] = f'{name}:{1}:{hash}'
+            self._new_config += f'{name}:{1}:{hash}\n'
             logger.warn(f"{self.LOG_TAG}下载器: {service.name} 种子: {name} 已记录")
 
     @staticmethod

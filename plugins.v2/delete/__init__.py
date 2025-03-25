@@ -21,7 +21,7 @@ class Delete(_PluginBase):
     # 插件图标
     plugin_icon = "Youtube-dl_C.png"
     # 插件版本
-    plugin_version = "1.0"
+    plugin_version = "1.0.1"
     # 插件作者
     plugin_author = "ClarkChen"
     # 作者主页
@@ -45,13 +45,16 @@ class Delete(_PluginBase):
     _scheduler = None
     _enabled = False
     _onlyonce = False
-    _days= 7
+    _delete = False
+    _times= 7
     _interval = "计划任务"
     _interval_cron = "0 14 * * *"
     _interval_time = 24
     _interval_unit = "小时"
     _downloaders = None
     _tag_map = "忽略标签"
+    _old_config = {}
+    _new_config = {}
 
     the_config = Path(__file__).parent / "config/config.ini"
 
@@ -61,16 +64,26 @@ class Delete(_PluginBase):
         if config:
             self._enabled = config.get("enabled")
             self._onlyonce = config.get("onlyonce")
-            self._days = self.str_to_number(config.get("days"), 7)
+            self._delete = config.get("delete")
+            self._times = self.str_to_number(config.get("times"), 7)
             self._interval = config.get("interval") or "计划任务"
             self._interval_cron = config.get("interval_cron") or "0 14 * * *"
             self._interval_time = self.str_to_number(config.get("interval_time"), 24)
             self._interval_unit = config.get("interval_unit") or "小时"
             self._downloaders = config.get("downloaders")
             self._tag_map = config.get("tag_map") or "忽略标签"
+            self._old_config = {}
+            self._new_config = {}
 
         if self._enabled:
             self._config = config.get("config", self.the_config.read_text(encoding="utf-8"))
+            if self._config:
+                the_config = self._config.split("\n")
+                for item in the_config:
+                    i = item.split(":")
+                    _hash = i[2]
+                    _times = int(i[1])
+                    self._old_config[_hash] = _times
 
         # 停止现有任务
         self.stop_service()
@@ -82,7 +95,6 @@ class Delete(_PluginBase):
             self._onlyonce = False
             config.update({"onlyonce": self._onlyonce})
             self.update_config(config)
-            # 执行自动限速
             self._scheduler.add_job(func=self._complete_delete, trigger='date',
                                     run_date=datetime.datetime.now(tz=pytz.timezone(settings.TZ)) + datetime.timedelta(seconds=3))
             if self._scheduler and self._scheduler.get_jobs():
@@ -172,7 +184,79 @@ class Delete(_PluginBase):
         return []
 
     def _complete_delete(self):
-        pass
+        if not self.service_infos:
+            return
+        tag_map = []
+        if self._tag_map:
+            tag_map = self._tag_map.split("\n")
+        logger.info(f"{self.LOG_TAG}开始执行 ...")
+        for service in self.service_infos.values():
+            downloader = service.name
+            downloader_obj = service.instance
+            logger.info(f"{self.LOG_TAG}开始扫描下载器 {downloader} ...")
+            if not downloader_obj:
+                logger.error(f"{self.LOG_TAG} 获取下载器失败 {downloader}")
+                continue
+            # 获取下载器中的种子
+            torrents, error = downloader_obj.get_torrents()
+            # 如果下载器获取种子发生错误 或 没有种子 则跳过
+            if error or not torrents:
+                continue
+            logger.info(f"{self.LOG_TAG}下载器 {downloader} 分析种子信息中 ...")
+            for torrent in torrents:
+                try:
+                    if self._event.is_set():
+                        logger.info(f"{self.LOG_TAG}停止服务")
+                        return
+                    # 获取种子当前标签
+                    torrent_tags = self._get_tags(torrent=torrent, dl_type=service.type)
+                    for tag in torrent_tags:
+                        if tag in tag_map:
+                            break
+                    else:
+                        self._check(service=service, torrent=torrent)
+                except Exception as e:
+                    logger.error(f"{self.LOG_TAG}分析种子信息时发生了错误: {str(e)}")
+        logger.info(f"{self.LOG_TAG}执行完成")
+
+    def _check(self, service: ServiceInfo, torrent):
+        if not service or not service.instance:
+            return
+        _hash = self._get_hash(torrent=torrent, dl_type=service.type)
+        downloader_obj = service.instance
+        # 下载器api不通用, 因此需分开处理
+        if service.type == "qbittorrent":
+            trackers = downloader_obj.qbc.torrents_trackers(_hash)
+            for tracker in trackers:
+                if tracker.status == 2:
+                    break
+            else:
+                self._handle(service=service, torrent=torrent, hash=_hash)
+        else:
+            stats = torrent.tracker_stats
+            for stat in stats:
+                if stat.last_announce_result == 'Success':
+                    break
+            else:
+                self._handle(service=service, torrent=torrent, hash=_hash)
+
+    def _handle(self, service: ServiceInfo, torrent, hash):
+        downloader_obj = service.instance
+        name = self._get_name(torrent=torrent, dl_type=service.type)
+        if hash in self._old_config:
+            time = self._old_config[hash] + 1
+            if time > self._times:
+                try:
+                    downloader_obj.delete_torrents(ids=hash, delete_file=False)
+                    logger.warn(f"{self.LOG_TAG}下载器: {service.name} 种子: {name} 已失联{time}次, 已删除")
+                except ValueError:
+                    logger.warn(f"{self.LOG_TAG}下载器: {service.name} 种子删除失败")
+            else:
+                self._new_config[hash] = f'{name}:{time}:{hash}'
+                logger.warn(f"{self.LOG_TAG}下载器: {service.name} 种子: {name} 已失联{time}次, 持续记录中")
+        else:
+            self._new_config[hash] = f'{name}:{1}:{hash}'
+            logger.warn(f"{self.LOG_TAG}下载器: {service.name} 种子: {name} 已记录")
 
     @staticmethod
     def str_to_number(s: str, i: int) -> int:
@@ -196,6 +280,14 @@ class Delete(_PluginBase):
         except Exception as e:
             print(str(e))
             return []
+
+    @staticmethod
+    def _get_name(torrent: Any, dl_type: str):
+        try:
+            return torrent.get("name") if dl_type == "qbittorrent" else torrent.name
+        except Exception as e:
+            print(str(e))
+            return ""
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         return ([
@@ -227,13 +319,13 @@ class Delete(_PluginBase):
                                 },
                                 'content': [
                                     {
-                                        'component': 'VCheckboxBtn',
+                                        'component': 'VSwitch',
                                         'props': {
-                                            'model': 'onlyonce',
-                                            'label': '运行一次'
-                                        }
+                                            'model': 'delete',
+                                            'label': '自动删除',
+                                        },
                                     }
-                                ]
+                                ],
                             },
                             {
                                 'component': 'VCol',
@@ -251,16 +343,36 @@ class Delete(_PluginBase):
                                 ],
                             },
                             {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 3
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VCheckboxBtn',
+                                        'props': {
+                                            'model': 'onlyonce',
+                                            'label': '运行一次'
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VRow',
+                        'content': [
+                            {
                                 "component": "VCol",
                                 "props": {
-                                    "cols": 3
+                                    "cols": 12
                                 },
                                 "content": [
                                     {
                                         "component": "VTextarea",
                                         "props": {
-                                            "model": "days",
-                                            "label": "失效时长",
+                                            "model": "times",
+                                            "label": "失效次数",
                                             "placeholder": "7",
                                         },
                                     }
@@ -441,7 +553,8 @@ class Delete(_PluginBase):
         {
             "enabled": False,
             "onlyonce": False,
-            "days": "7",
+            "delete": False,
+            "times": "7",
             "interval": "计划任务",
             "interval_cron": "0 14 * * *",
             "interval_time": "24",

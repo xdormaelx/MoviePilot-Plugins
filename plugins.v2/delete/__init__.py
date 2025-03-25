@@ -1,6 +1,5 @@
 import datetime
 import threading
-from pathlib import Path
 from typing import List, Tuple, Dict, Any, Optional
 
 import pytz
@@ -34,8 +33,7 @@ class Delete(_PluginBase):
     auth_level = 2
     # 日志前缀
     LOG_TAG = "[Delete]"
-    # Config
-    _config = None
+    
 
     # 退出事件
     _event = threading.Event()
@@ -53,10 +51,7 @@ class Delete(_PluginBase):
     _interval_unit = "小时"
     _downloaders = None
     _tag_map = "忽略标签"
-    _old_config = {}
-    _new_config = ''
-
-    the_config = Path(__file__).parent / "config/config.ini"
+    _delete_config = ""
 
     def init_plugin(self, config: dict = None):
         self.downloader_helper = DownloaderHelper()
@@ -72,18 +67,7 @@ class Delete(_PluginBase):
             self._interval_unit = config.get("interval_unit") or "小时"
             self._downloaders = config.get("downloaders")
             self._tag_map = config.get("tag_map") or "忽略标签"
-            self._old_config = {}
-            self._new_config = ''
-
-        if self._enabled:
-            self._config = config.get("config", self.the_config.read_text(encoding="utf-8"))
-            if self._config:
-                the_config = self._config.split("\n")
-                for item in the_config:
-                    i = item.split(":")
-                    _hash = i[2]
-                    _times = int(i[1])
-                    self._old_config[_hash] = _times
+            self._delete_config = config.get("delete_config")
 
         # 停止现有任务
         self.stop_service()
@@ -186,6 +170,14 @@ class Delete(_PluginBase):
     def _complete_delete(self):
         if not self.service_infos:
             return
+        self._old_config = {}
+        self._new_config = ''
+        if self._enabled and self._delete_config:
+            for item in self._delete_config.split("\n"):
+                i = item.split(":")
+                _hash = i[2]
+                _times = int(i[1])
+                self._old_config[_hash] = _times
         tag_map = []
         if self._tag_map:
             tag_map = self._tag_map.split("\n")
@@ -217,7 +209,7 @@ class Delete(_PluginBase):
                         self._check(service=service, torrent=torrent)
                 except Exception as e:
                     logger.error(f"{self.LOG_TAG}分析种子信息时发生了错误: {str(e)}")
-        self.the_config.write_text(self._new_config[:-1], encoding="utf-8")
+        self.update_config({"delete_config": self._new_config})
         logger.info(f"{self.LOG_TAG}执行完成")
 
     def _check(self, service: ServiceInfo, torrent):
@@ -337,7 +329,7 @@ class Delete(_PluginBase):
                                     {
                                         'component': 'VSwitch',
                                         'props': {
-                                            'model': 'check',
+                                            'model': 'dialog_closed',
                                             'label': '查看记录',
                                         },
                                     }
@@ -511,7 +503,7 @@ class Delete(_PluginBase):
                     {
                         "component": "VDialog",
                         "props": {
-                            "model": "check",
+                            "model": "dialog_closed",
                             "max-width": "60rem",
                             "overlay-class": "v-dialog--scrollable v-overlay--scroll-blocked",
                             "content-class": "v-card v-card--density-default v-card--variant-elevated rounded-t"
@@ -526,7 +518,7 @@ class Delete(_PluginBase):
                                     {
                                         "component": "VDialogCloseBtn",
                                         "props": {
-                                            "model": "check"
+                                            "model": "dialog_closed"
                                         }
                                     },
                                     {
@@ -538,7 +530,7 @@ class Delete(_PluginBase):
                                             {
                                                 'component': 'VAceEditor',
                                                 'props': {
-                                                    'model': 'config',
+                                                    'model': 'delete_config',
                                                     'style': 'height: 30rem'
                                                 }
                                             }
@@ -561,7 +553,7 @@ class Delete(_PluginBase):
             "interval_time": "24",
             "interval_unit": "小时",
             "tag_map": "忽略标签",
-            "config": self.the_config.read_text(encoding="utf-8")
+            "delete_config": ""
         })
 
     def get_page(self) -> List[dict]:

@@ -39,4 +39,13 @@
     "author": "ClarkChen",
     "level": 2
   },
+  "Download": {
+    "name": "刷下载量",
+    "description": "根据升级要求刷下载量",
+    "labels": "下载管理",
+    "version": "1.0",
+    "icon": "download.png",
+    "author": "ClarkChen",
+    "level": 2
+  },
 }

@@ -20,7 +20,7 @@ class Delete(_PluginBase):
     # 插件图标
     plugin_icon = "Youtube-dl_C.png"
     # 插件版本
-    plugin_version = "1.0.3"
+    plugin_version = "1.0.4"
     # 插件作者
     plugin_author = "ClarkChen"
     # 作者主页
@@ -31,8 +31,6 @@ class Delete(_PluginBase):
     plugin_order = 23
     # 可使用的用户级别
     auth_level = 2
-    # 日志前缀
-    LOG_TAG = "[Delete]"
 
 
     # 退出事件
@@ -147,7 +145,7 @@ class Delete(_PluginBase):
                     else:
                         if self._interval_time < 5:
                             self._interval_time = 5
-                            logger.info(f"{self.LOG_TAG}启动定时服务: 最小不少于5分钟, 防止执行间隔太短任务冲突")
+                            logger.info(f"启动定时服务: 最小不少于5分钟, 防止执行间隔太短任务冲突")
                         return [{
                             "id": "Delete",
                             "name": "自动删除",
@@ -171,7 +169,7 @@ class Delete(_PluginBase):
         if not self.service_infos:
             return
         self._old_config = {}
-        self._new_config = ''
+        self._new_config = ""
         if self._enabled and self._delete_config:
             for item in self._delete_config.split("\n"):
                 i = item.split(":")
@@ -181,24 +179,24 @@ class Delete(_PluginBase):
         tag_map = []
         if self._tag_map:
             tag_map = self._tag_map.split("\n")
-        logger.info(f"{self.LOG_TAG}开始执行 ...")
+        logger.info(f"开始执行 ...")
         for service in self.service_infos.values():
             downloader = service.name
             downloader_obj = service.instance
-            logger.info(f"{self.LOG_TAG}开始扫描下载器 {downloader} ...")
+            logger.info(f"开始扫描下载器 {downloader} ...")
             if not downloader_obj:
-                logger.error(f"{self.LOG_TAG} 获取下载器失败 {downloader}")
+                logger.error(f"获取下载器失败 {downloader}")
                 continue
             # 获取下载器中的种子
             torrents, error = downloader_obj.get_torrents()
             # 如果下载器获取种子发生错误 或 没有种子 则跳过
             if error or not torrents:
                 continue
-            logger.info(f"{self.LOG_TAG}下载器 {downloader} 分析种子信息中 ...")
+            logger.info(f"下载器 {downloader} 分析种子信息中 ...")
             for torrent in torrents:
                 try:
                     if self._event.is_set():
-                        logger.info(f"{self.LOG_TAG}停止服务")
+                        logger.info(f"停止服务")
                         return
                     # 获取种子当前标签
                     torrent_tags = self._get_tags(torrent=torrent, dl_type=service.type)
@@ -208,11 +206,11 @@ class Delete(_PluginBase):
                     else:
                         self._check(service=service, torrent=torrent)
                 except Exception as e:
-                    logger.error(f"{self.LOG_TAG}分析种子信息时发生了错误: {str(e)}")
+                    logger.error(f"分析种子信息时发生了错误: {str(e)}")
+        logger.info(f"执行完成")
         config = self.get_config()
         config["delete_config"] = self._new_config
-        self.update_config(config)
-        logger.info(f"{self.LOG_TAG}执行完成")
+        self.update_config(config=config)
 
     def _check(self, service: ServiceInfo, torrent):
         if not service or not service.instance:
@@ -243,15 +241,15 @@ class Delete(_PluginBase):
             if time > self._times:
                 try:
                     downloader_obj.delete_torrents(ids=hash, delete_file=False)
-                    logger.warn(f"{self.LOG_TAG}下载器: {service.name} 种子: {name} 已失联{time}次, 已删除")
+                    logger.warn(f"下载器:{service.name} 种子:{name} 已失联{time}次, 已删除")
                 except ValueError:
-                    logger.warn(f"{self.LOG_TAG}下载器: {service.name} 种子删除失败")
+                    logger.warn(f"下载器:{service.name} 种子删除失败")
             else:
                 self._new_config += f'{name}:{time}:{hash}\n'
-                logger.warn(f"{self.LOG_TAG}下载器: {service.name} 种子: {name} 已失联{time}次, 持续记录中")
+                logger.warn(f"下载器:{service.name} 种子:{name} 已失联{time}次, 持续记录中")
         else:
             self._new_config += f'{name}:{1}:{hash}\n'
-            logger.warn(f"{self.LOG_TAG}下载器: {service.name} 种子: {name} 已记录")
+            logger.warn(f"下载器:{service.name} 种子:{name} 已记录")
 
     @staticmethod
     def str_to_number(s: str, i: int) -> int:
@@ -360,7 +358,8 @@ class Delete(_PluginBase):
                             {
                                 "component": "VCol",
                                 "props": {
-                                    "cols": 12
+                                    "cols": 12,
+                                    "rows": 1
                                 },
                                 "content": [
                                     {

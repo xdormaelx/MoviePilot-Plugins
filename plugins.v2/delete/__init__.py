@@ -207,10 +207,12 @@ class Delete(_PluginBase):
                         self._check(service=service, torrent=torrent)
                 except Exception as e:
                     logger.error(f"分析种子信息时发生了错误: {str(e)}")
-        logger.info(f"执行完成")
         config = self.get_config()
+        logger.info(f"读取config:{config}")
         config["delete_config"] = self._new_config
+        logger.info(f"设置config为:{config}")
         self.update_config(config=config)
+        logger.info(f"执行完成")
 
     def _check(self, service: ServiceInfo, torrent):
         if not service or not service.instance:

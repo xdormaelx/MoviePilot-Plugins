@@ -20,7 +20,7 @@ class Delete(_PluginBase):
     # 插件图标
     plugin_icon = "Youtube-dl_C.png"
     # 插件版本
-    plugin_version = "1.0.4"
+    plugin_version = "1.0.5"
     # 插件作者
     plugin_author = "ClarkChen"
     # 作者主页
@@ -48,7 +48,7 @@ class Delete(_PluginBase):
     _interval_time = 24
     _interval_unit = "小时"
     _downloaders = None
-    _tag_map = "忽略标签"
+    _tag_map = ""
     _delete_config = ""
 
     def init_plugin(self, config: dict = None):
@@ -64,7 +64,7 @@ class Delete(_PluginBase):
             self._interval_time = self.str_to_number(config.get("interval_time"), 24)
             self._interval_unit = config.get("interval_unit") or "小时"
             self._downloaders = config.get("downloaders")
-            self._tag_map = config.get("tag_map") or "忽略标签"
+            self._tag_map = config.get("tag_map")
             self._delete_config = config.get("delete_config")
 
         # 停止现有任务
@@ -241,15 +241,15 @@ class Delete(_PluginBase):
             if time > self._times:
                 try:
                     downloader_obj.delete_torrents(ids=hash, delete_file=False)
-                    logger.warn(f"下载器:{service.name} 种子:{name} 已失联{time}次, 已删除")
+                    logger.warning(f"下载器:{service.name} 种子:{name} 已失联{time}次, 已删除")
                 except ValueError:
-                    logger.warn(f"下载器:{service.name} 种子删除失败")
+                    logger.error(f"下载器:{service.name} 种子删除失败")
             else:
                 self._new_config += f'{name}:{time}:{hash}\n'
-                logger.warn(f"下载器:{service.name} 种子:{name} 已失联{time}次, 持续记录中")
+                logger.info(f"下载器:{service.name} 种子:{name} 已失联{time}次, 持续记录中")
         else:
             self._new_config += f'{name}:{1}:{hash}\n'
-            logger.warn(f"下载器:{service.name} 种子:{name} 已记录")
+            logger.info(f"下载器:{service.name} 种子:{name} 已记录")
 
     @staticmethod
     def str_to_number(s: str, i: int) -> int:
@@ -358,12 +358,11 @@ class Delete(_PluginBase):
                             {
                                 "component": "VCol",
                                 "props": {
-                                    "cols": 12,
-                                    "rows": 1
+                                    "cols": 12
                                 },
                                 "content": [
                                     {
-                                        "component": "VTextarea",
+                                        "component": "VTextField",
                                         "props": {
                                             "model": "times",
                                             "label": "失效次数",
@@ -492,7 +491,7 @@ class Delete(_PluginBase):
                                         "component": "VTextarea",
                                         "props": {
                                             "model": "tag_map",
-                                            "label": "标签",
+                                            "label": "忽视标签",
                                             "rows": 5,
                                             "placeholder": "如:XX\nYY",
                                         },
@@ -526,16 +525,8 @@ class Delete(_PluginBase):
                                         "component": "VCardText",
                                         "props": {
                                             'cols': 12,
-                                        },
-                                        "content": [
-                                            {
-                                                'component': 'VAceEditor',
-                                                'props': {
-                                                    'model': 'delete_config',
-                                                    'style': 'height: 30rem'
-                                                }
-                                            }
-                                        ]
+                                            'model': 'delete_config'
+                                        }
                                     }
                                 ]
                             }
@@ -553,7 +544,7 @@ class Delete(_PluginBase):
             "interval_cron": "0 14 * * *",
             "interval_time": "24",
             "interval_unit": "小时",
-            "tag_map": "忽略标签",
+            "tag_map": "",
             "delete_config": ""
         })
 

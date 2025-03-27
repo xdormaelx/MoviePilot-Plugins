@@ -1,6 +1,5 @@
-import datetime
 import threading
-from pathlib import Path
+from datetime import datetime, timedelta
 from typing import List, Tuple, Dict, Any, Optional
 
 import pytz
@@ -21,7 +20,7 @@ class Delete(_PluginBase):
     # 插件图标
     plugin_icon = "Youtube-dl_C.png"
     # 插件版本
-    plugin_version = "1.0.7"
+    plugin_version = "1.0.8"
     # 插件作者
     plugin_author = "ClarkChen"
     # 作者主页
@@ -43,6 +42,7 @@ class Delete(_PluginBase):
     _enabled = False
     _onlyonce = False
     _delete = False
+    _accumulate = False
     _times= 7
     _interval = "计划任务"
     _interval_cron = "0 14 * * *"
@@ -50,9 +50,7 @@ class Delete(_PluginBase):
     _interval_unit = "小时"
     _downloaders = None
     _tag_map = ""
-    _delete_config = None
 
-    Config = Path(__file__).parent / "config/config.text"
 
     def init_plugin(self, config: dict = None):
         self.downloader_helper = DownloaderHelper()
@@ -61,6 +59,7 @@ class Delete(_PluginBase):
             self._enabled = config.get("enabled")
             self._onlyonce = config.get("onlyonce")
             self._delete = config.get("delete")
+            self._accumulate = config.get("accumulate")
             self._times = self.str_to_number(config.get("times"), 7)
             self._interval = config.get("interval") or "计划任务"
             self._interval_cron = config.get("interval_cron") or "0 14 * * *"
@@ -68,8 +67,6 @@ class Delete(_PluginBase):
             self._interval_unit = config.get("interval_unit") or "小时"
             self._downloaders = config.get("downloaders")
             self._tag_map = config.get("tag_map")
-
-        self._delete_config = self.Config.read_text(encoding="utf-8")
 
         # 停止现有任务
         self.stop_service()
@@ -82,7 +79,7 @@ class Delete(_PluginBase):
             config.update({"onlyonce": self._onlyonce})
             self.update_config(config)
             self._scheduler.add_job(func=self._complete_delete, trigger='date',
-                                    run_date=datetime.datetime.now(tz=pytz.timezone(settings.TZ)) + datetime.timedelta(seconds=3))
+                                    run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=3))
             if self._scheduler and self._scheduler.get_jobs():
                 # 启动服务
                 self._scheduler.print_jobs()
@@ -172,19 +169,13 @@ class Delete(_PluginBase):
     def _complete_delete(self):
         if not self.service_infos:
             return
-        self._old_config = {}
-        self._new_config = ""
-        logger.info(f"config为:{self._delete_config}")
-        if self._enabled and self._delete_config:
-            for item in self._delete_config.split("\n"):
-                i = item.split("￥")
-                _hash = i[2]
-                _times = int(i[1])
-                self._old_config[_hash] = _times
+        self._old_config = self.get_data()
+        if self._accumulate:
+            self.del_data(key="")
+        logger.info(f"开始执行 ...")
         tag_map = []
         if self._tag_map:
             tag_map = self._tag_map.split("\n")
-        logger.info(f"开始执行 ...")
         for service in self.service_infos.values():
             downloader = service.name
             downloader_obj = service.instance
@@ -212,7 +203,6 @@ class Delete(_PluginBase):
                         self._check(service=service, torrent=torrent)
                 except Exception as e:
                     logger.error(f"分析种子信息时发生了错误: {str(e)}")
-        self.Config.write_text(self._new_config, encoding="utf-8")
         logger.info(f"执行完成")
 
     def _check(self, service: ServiceInfo, torrent):
@@ -248,10 +238,10 @@ class Delete(_PluginBase):
                 except ValueError:
                     logger.error(f"下载器:{service.name}种子删除失败")
             else:
-                self._new_config += f'{name}￥{time}￥{hash}\n'
+                self.save_data(key=hash,value=[service.name,name,time])
                 logger.info(f"下载器:{service.name}种子:{name}已失联{time}次, 持续记录中")
         else:
-            self._new_config += f'{name}￥{1}￥{hash}\n'
+            self.save_data(key=hash, value=[service.name,name,1])
             logger.info(f"下载器:{service.name}种子:{name}已记录")
 
     @staticmethod
@@ -332,11 +322,11 @@ class Delete(_PluginBase):
                                     {
                                         'component': 'VSwitch',
                                         'props': {
-                                            'model': 'dialog_closed',
-                                            'label': '查看记录',
-                                        },
+                                            'model': 'accumulate',
+                                            'label': '连续累计'
+                                        }
                                     }
-                                ],
+                                ]
                             },
                             {
                                 'component': 'VCol',
@@ -494,46 +484,14 @@ class Delete(_PluginBase):
                                         "component": "VTextarea",
                                         "props": {
                                             "model": "tag_map",
-                                            "label": "忽视标签",
+                                            "label": "忽略标签",
                                             "rows": 5,
-                                            "placeholder": "如:XX\nYY",
+                                            "placeholder": "填入不想统计的种子的标签",
                                         },
                                     }
                                 ],
                             }
                         ],
-                    },
-                    {
-                        "component": "VDialog",
-                        "props": {
-                            "model": "dialog_closed",
-                            "max-width": "60rem",
-                            "overlay-class": "v-dialog--scrollable v-overlay--scroll-blocked",
-                            "content-class": "v-card v-card--density-default v-card--variant-elevated rounded-t"
-                        },
-                        "content": [
-                            {
-                                "component": "VCard",
-                                "props": {
-                                    "title": "记录"
-                                },
-                                "content": [
-                                    {
-                                        "component": "VDialogCloseBtn",
-                                        "props": {
-                                            "model": "dialog_closed"
-                                        }
-                                    },
-                                    {
-                                        "component": "VCardText",
-                                        "props": {
-                                            'cols': 12,
-                                            'model': 'delete_config'
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
                     }
                 ]
             }
@@ -542,17 +500,102 @@ class Delete(_PluginBase):
             "enabled": False,
             "onlyonce": False,
             "delete": False,
+            "accumulate": False, 
             "times": "7",
             "interval": "计划任务",
             "interval_cron": "0 14 * * *",
             "interval_time": "24",
             "interval_unit": "小时",
-            "tag_map": "",
-            "delete_config": ""
+            "tag_map": ""
         })
 
     def get_page(self) -> List[dict]:
-        pass
+        the_data = self.get_data()
+        if the_data:
+            contents = [
+                {
+                    'component': 'tr',
+                    'props': {
+                        'class': 'text-sm'
+                    },
+                    'content': [
+                        {
+                            'component': 'td',
+                            'text': the_data[key][0]
+                        },
+                        {
+                            'component': 'td',
+                            'text': the_data[key][1]
+                        },
+                        {
+                            'component': 'td',
+                            'text': the_data[key][2]
+                        }
+                    ]
+                } for key in the_data
+            ]
+        else:
+            contents = [
+                {
+                    'component': 'tr',
+                    'props': {
+                        'class': 'text-sm'
+                    },
+                    'content': [
+                        {
+                            'component': 'td',
+                            'props': {
+                                'colspan': 3,
+                                'class': 'text-center'
+                            },
+                            'text': '暂无数据'
+                        }
+                    ]
+                }
+            ]
+        return [
+            {
+                'component': 'VTable',
+                'props': {
+                    'hover': True
+                },
+                'content': [
+                    {
+                        'component': 'thead',
+                        'content': [
+                            {
+                                'component': 'th',
+                                'props': {
+                                    'class': 'text-start ps-4',
+                                    'cols': 2
+                                },
+                                'text': '下载器'
+                            },
+                            {
+                                'component': 'th',
+                                'props': {
+                                    'class': 'text-start ps-4',
+                                    'cols': 9
+                                },
+                                'text': '种子名称'
+                            },
+                            {
+                                'component': 'th',
+                                'props': {
+                                    'class': 'text-start ps-4',
+                                    'cols': 1
+                                },
+                                'text': '失联次数'
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'tbody',
+                        'content': contents
+                    }
+                ]
+            }
+        ]
 
     def stop_service(self):
         try:

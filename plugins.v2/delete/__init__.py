@@ -1,5 +1,6 @@
 import datetime
 import threading
+from pathlib import Path
 from typing import List, Tuple, Dict, Any, Optional
 
 import pytz
@@ -20,7 +21,7 @@ class Delete(_PluginBase):
     # 插件图标
     plugin_icon = "Youtube-dl_C.png"
     # 插件版本
-    plugin_version = "1.0.6"
+    plugin_version = "1.0.7"
     # 插件作者
     plugin_author = "ClarkChen"
     # 作者主页
@@ -49,7 +50,9 @@ class Delete(_PluginBase):
     _interval_unit = "小时"
     _downloaders = None
     _tag_map = ""
-    _delete_config = ""
+    _delete_config = None
+
+    Config = Path(__file__).parent / "config/config.text"
 
     def init_plugin(self, config: dict = None):
         self.downloader_helper = DownloaderHelper()
@@ -65,7 +68,8 @@ class Delete(_PluginBase):
             self._interval_unit = config.get("interval_unit") or "小时"
             self._downloaders = config.get("downloaders")
             self._tag_map = config.get("tag_map")
-            self._delete_config = config.get("delete_config")
+
+        self._delete_config = self.Config.read_text(encoding="utf-8")
 
         # 停止现有任务
         self.stop_service()
@@ -173,7 +177,7 @@ class Delete(_PluginBase):
         logger.info(f"config为:{self._delete_config}")
         if self._enabled and self._delete_config:
             for item in self._delete_config.split("\n"):
-                i = item.split(":")
+                i = item.split("￥")
                 _hash = i[2]
                 _times = int(i[1])
                 self._old_config[_hash] = _times
@@ -208,9 +212,7 @@ class Delete(_PluginBase):
                         self._check(service=service, torrent=torrent)
                 except Exception as e:
                     logger.error(f"分析种子信息时发生了错误: {str(e)}")
-        config = self.get_config()
-        config["delete_config"] = self._new_config
-        self.update_config(config=config)
+        self.Config.write_text(self._new_config, encoding="utf-8")
         logger.info(f"执行完成")
 
     def _check(self, service: ServiceInfo, torrent):
@@ -242,15 +244,15 @@ class Delete(_PluginBase):
             if time > self._times:
                 try:
                     downloader_obj.delete_torrents(ids=hash, delete_file=False)
-                    logger.warning(f"下载器:{service.name} 种子:{name} 已失联{time}次, 已删除")
+                    logger.warning(f"下载器:{service.name}种子:{name}已失联{time}次, 已删除")
                 except ValueError:
-                    logger.error(f"下载器:{service.name} 种子删除失败")
+                    logger.error(f"下载器:{service.name}种子删除失败")
             else:
-                self._new_config += f'{name}:{time}:{hash}\n'
-                logger.info(f"下载器:{service.name} 种子:{name} 已失联{time}次, 持续记录中")
+                self._new_config += f'{name}￥{time}￥{hash}\n'
+                logger.info(f"下载器:{service.name}种子:{name}已失联{time}次, 持续记录中")
         else:
-            self._new_config += f'{name}:{1}:{hash}\n'
-            logger.info(f"下载器:{service.name} 种子:{name} 已记录")
+            self._new_config += f'{name}￥{1}￥{hash}\n'
+            logger.info(f"下载器:{service.name}种子:{name}已记录")
 
     @staticmethod
     def str_to_number(s: str, i: int) -> int:

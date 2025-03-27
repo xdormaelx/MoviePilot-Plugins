@@ -20,7 +20,7 @@ class Delete(_PluginBase):
     # 插件图标
     plugin_icon = "Youtube-dl_C.png"
     # 插件版本
-    plugin_version = "1.1"
+    plugin_version = "1.1.1"
     # 插件作者
     plugin_author = "ClarkChen"
     # 作者主页
@@ -169,7 +169,9 @@ class Delete(_PluginBase):
     def _complete_delete(self):
         if not self.service_infos:
             return
-        self._old_config = self.get_data(key="torrents")
+        self._old_config = {}
+        if self.get_data(key="config"):
+            self._old_config = self.get_data(key="config")
         self._new_config = {}
         if not self._accumulate:
             self._new_config = self._old_config
@@ -204,7 +206,7 @@ class Delete(_PluginBase):
                         self._check(service=service, torrent=torrent)
                 except Exception as e:
                     logger.error(f"分析种子信息时发生了错误: {str(e)}")
-        self.save_data(key="torrents", value=self._new_config)
+        self.save_data(key="config", value=self._new_config)
         logger.info(f"执行完成")
 
     def _check(self, service: ServiceInfo, torrent):
@@ -512,7 +514,7 @@ class Delete(_PluginBase):
         })
 
     def get_page(self) -> List[dict]:
-        the_config = self.get_data(key="torrents")
+        the_config = self.get_data(key="config")
         if the_config:
             contents = [
                 {

@@ -20,7 +20,7 @@ class Delete(_PluginBase):
     # 插件图标
     plugin_icon = "Youtube-dl_C.png"
     # 插件版本
-    plugin_version = "1.0.5"
+    plugin_version = "1.0.6"
     # 插件作者
     plugin_author = "ClarkChen"
     # 作者主页
@@ -170,6 +170,7 @@ class Delete(_PluginBase):
             return
         self._old_config = {}
         self._new_config = ""
+        logger.info(f"config为:{self._delete_config}")
         if self._enabled and self._delete_config:
             for item in self._delete_config.split("\n"):
                 i = item.split(":")
@@ -208,9 +209,7 @@ class Delete(_PluginBase):
                 except Exception as e:
                     logger.error(f"分析种子信息时发生了错误: {str(e)}")
         config = self.get_config()
-        logger.info(f"读取config:{config}")
         config["delete_config"] = self._new_config
-        logger.info(f"设置config为:{config}")
         self.update_config(config=config)
         logger.info(f"执行完成")
 

@@ -20,7 +20,7 @@ class Delete(_PluginBase):
     # 插件图标
     plugin_icon = "Youtube-dl_C.png"
     # 插件版本
-    plugin_version = "1.0.2"
+    plugin_version = "1.0.3"
     # 插件作者
     plugin_author = "ClarkChen"
     # 作者主页
@@ -33,7 +33,7 @@ class Delete(_PluginBase):
     auth_level = 2
     # 日志前缀
     LOG_TAG = "[Delete]"
-    
+
 
     # 退出事件
     _event = threading.Event()
@@ -209,7 +209,9 @@ class Delete(_PluginBase):
                         self._check(service=service, torrent=torrent)
                 except Exception as e:
                     logger.error(f"{self.LOG_TAG}分析种子信息时发生了错误: {str(e)}")
-        self.update_config({"delete_config": self._new_config})
+        config = self.get_config()
+        config["delete_config"] = self._new_config
+        self.update_config(config)
         logger.info(f"{self.LOG_TAG}执行完成")
 
     def _check(self, service: ServiceInfo, torrent):

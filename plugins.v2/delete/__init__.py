@@ -20,7 +20,7 @@ class Delete(_PluginBase):
     # 插件图标
     plugin_icon = "Youtube-dl_C.png"
     # 插件版本
-    plugin_version = "1.0.8"
+    plugin_version = "1.1"
     # 插件作者
     plugin_author = "ClarkChen"
     # 作者主页
@@ -169,9 +169,10 @@ class Delete(_PluginBase):
     def _complete_delete(self):
         if not self.service_infos:
             return
-        self._old_config = self.get_data()
-        if self._accumulate:
-            self.del_data(key="")
+        self._old_config = self.get_data(key="torrents")
+        self._new_config = {}
+        if not self._accumulate:
+            self._new_config = self._old_config
         logger.info(f"开始执行 ...")
         tag_map = []
         if self._tag_map:
@@ -203,6 +204,7 @@ class Delete(_PluginBase):
                         self._check(service=service, torrent=torrent)
                 except Exception as e:
                     logger.error(f"分析种子信息时发生了错误: {str(e)}")
+        self.save_data(key="torrents", value=self._new_config)
         logger.info(f"执行完成")
 
     def _check(self, service: ServiceInfo, torrent):
@@ -230,7 +232,7 @@ class Delete(_PluginBase):
         downloader_obj = service.instance
         name = self._get_name(torrent=torrent, dl_type=service.type)
         if hash in self._old_config:
-            time = self._old_config[hash] + 1
+            time = self._old_config[hash].get('time') + 1
             if time > self._times:
                 try:
                     downloader_obj.delete_torrents(ids=hash, delete_file=False)
@@ -238,10 +240,10 @@ class Delete(_PluginBase):
                 except ValueError:
                     logger.error(f"下载器:{service.name}种子删除失败")
             else:
-                self.save_data(key=hash,value=[service.name,name,time])
+                self._new_config[hash] = {"type":service.name,"name":name,"time":time}
                 logger.info(f"下载器:{service.name}种子:{name}已失联{time}次, 持续记录中")
         else:
-            self.save_data(key=hash, value=[service.name,name,1])
+            self._new_config[hash] = {"type":service.name,"name":name,"time":1}
             logger.info(f"下载器:{service.name}种子:{name}已记录")
 
     @staticmethod
@@ -500,7 +502,7 @@ class Delete(_PluginBase):
             "enabled": False,
             "onlyonce": False,
             "delete": False,
-            "accumulate": False, 
+            "accumulate": False,
             "times": "7",
             "interval": "计划任务",
             "interval_cron": "0 14 * * *",
@@ -510,8 +512,8 @@ class Delete(_PluginBase):
         })
 
     def get_page(self) -> List[dict]:
-        the_data = self.get_data()
-        if the_data:
+        the_config = self.get_data(key="torrents")
+        if the_config:
             contents = [
                 {
                     'component': 'tr',
@@ -521,18 +523,18 @@ class Delete(_PluginBase):
                     'content': [
                         {
                             'component': 'td',
-                            'text': the_data[key][0]
+                            'text': the_config[hash].get("type")
                         },
                         {
                             'component': 'td',
-                            'text': the_data[key][1]
+                            'text': the_config[hash].get("name")
                         },
                         {
                             'component': 'td',
-                            'text': the_data[key][2]
+                            'text': the_config[hash].get("time")
                         }
                     ]
-                } for key in the_data
+                } for hash in the_config
             ]
         else:
             contents = [
@@ -566,24 +568,21 @@ class Delete(_PluginBase):
                             {
                                 'component': 'th',
                                 'props': {
-                                    'class': 'text-start ps-4',
-                                    'cols': 2
+                                    'class': 'text-start ps-4'
                                 },
                                 'text': '下载器'
                             },
                             {
                                 'component': 'th',
                                 'props': {
-                                    'class': 'text-start ps-4',
-                                    'cols': 9
+                                    'class': 'text-start ps-4'
                                 },
                                 'text': '种子名称'
                             },
                             {
                                 'component': 'th',
                                 'props': {
-                                    'class': 'text-start ps-4',
-                                    'cols': 1
+                                    'class': 'text-start ps-4'
                                 },
                                 'text': '失联次数'
                             }

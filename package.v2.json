@@ -21,6 +21,15 @@
         "v1.1": "新增两个模式"
     }
   },
+  "BigTag": {
+    "name": "自动标签(大容量)",
+    "description": "支持大量自定义",
+    "labels": "下载管理",
+    "version": "1.0",
+    "icon": "Youtube-dl_B.png",
+    "author": "ClarkChen",
+    "level": 2
+  },
   "Limit": {
     "name": "自动限速",
     "description": "给qb、tr的下载任务限速",

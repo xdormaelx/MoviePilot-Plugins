@@ -142,7 +142,7 @@ class BigTag(_PluginBase):
                     if self._interval_unit == "小时":
                         return [{
                             "id": "BigTag",
-                            "name": "自动补全标签",
+                            "name": "自动补全标签(大容量)",
                             "trigger": "interval",
                             "func": self._complemented_tags,
                             "kwargs": {
@@ -155,7 +155,7 @@ class BigTag(_PluginBase):
                             logger.info(f"{self.LOG_TAG}启动定时服务: 最小不少于5分钟, 防止执行间隔太短任务冲突")
                         return [{
                             "id": "BigTag",
-                            "name": "自动补全标签",
+                            "name": "自动补全标签(大容量)",
                             "trigger": "interval",
                             "func": self._complemented_tags,
                             "kwargs": {
@@ -165,7 +165,7 @@ class BigTag(_PluginBase):
                 else:
                     return [{
                         "id": "BigTag",
-                        "name": "自动补全标签",
+                        "name": "自动补全标签(大容量)",
                         "trigger": CronTrigger.from_crontab(self._interval_cron),
                         "func": self._complemented_tags,
                         "kwargs": {}

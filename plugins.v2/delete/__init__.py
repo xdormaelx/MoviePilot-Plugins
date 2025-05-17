@@ -235,7 +235,7 @@ class Delete(_PluginBase):
         name = self._get_name(torrent=torrent, dl_type=service.type)
         if hash in self._old_config:
             time = self._old_config[hash].get('time') + 1
-            if time > self._times:
+            if time > self._times and self._delete:
                 try:
                     downloader_obj.delete_torrents(ids=hash, delete_file=False)
                     logger.warning(f"下载器:{service.name}种子:{name}已失联{time}次, 已删除")

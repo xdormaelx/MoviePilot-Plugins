@@ -6,7 +6,7 @@ import re
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 
-from app.plugins import PluginBase
+from app.plugins import _PluginBase
 from app.schemas.types import EventType
 from app.core.config import settings
 from app.events import eventmanager, Event
@@ -117,7 +117,7 @@ class SubtitleRenamer:
         # 生成新的字幕文件名
         return f"{video_base}{sub_ext}"
 
-class AutoSubRename(PluginBase):
+class AutoSubRename(_PluginBase):
     # 插件名称
     plugin_name = "AutoSubRename"
     # 插件描述

@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from app.plugins import _PluginBase
 from app.schemas.types import EventType
 from app.core.config import settings
-from app.events import eventmanager, Event
+from app.core.event import eventmanager, Event
 from app.helper.plugin_config import PluginConfigHelper
 from app.schemas.types import SystemConfigKey
 

@@ -1,51 +1,11 @@
 {
-  "HA": {
-      "name": "HA助手",
-      "description": "与HA联动",
-      "labels": "消息通知",
-      "version": "1.0.6",
-      "icon": "https://github.com/aClarkChen/MoviePilot-Plugins/blob/main/icons/ha.png?raw=true",
-      "author": "ClarkChen",
-      "level": 2
-  },
-  "Tag": {
-    "name": "自动标签",
-    "description": "给qb、tr的下载任务贴标签(支持自定义)",
-    "labels": "下载管理",
-    "version": "1.2.1",
-    "icon": "Youtube-dl_B.png",
-    "author": "ClarkChen",
-    "level": 2,
-    "history": {
-        "v1.2": "修复bug",
-        "v1.1": "新增两个模式"
-    }
-  },
-  "BigTag": {
-    "name": "自动标签(大容量)",
-    "description": "支持大量自定义",
-    "labels": "下载管理",
-    "version": "1.0",
-    "icon": "Youtube-dl_B.png",
-    "author": "ClarkChen",
-    "level": 2
-  },
-  "Limit": {
-    "name": "自动限速",
-    "description": "给qb、tr的下载任务限速",
-    "labels": "下载管理",
-    "version": "1.1.5",
-    "icon": "Youtube-dl_A.png",
-    "author": "ClarkChen",
-    "level": 2
-  },
-  "Delete": {
-    "name": "自动删除",
-    "description": "删除qb、tr中tracker长期无法访问的下载任务",
-    "labels": "下载管理",
-    "version": "1.1.2",
-    "icon": "Youtube-dl_C.png",
-    "author": "ClarkChen",
+  "AutoSubRename": {
+    "name": "字幕自动重命名",
+    "description": "自动将匹配的字幕文件重命名为对应视频文件的名称",
+    "labels": "工具",
+    "version": "1.0.0",
+    "icon": "rename.png",
+    "author": "开发者名称",
     "level": 2
   }
 }

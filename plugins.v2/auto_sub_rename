@@ -125,9 +125,9 @@ class AutoSubRename(PluginBase):
     # 插件图标
     plugin_icon = "rename.png"
     # 插件版本
-    plugin_version = "1.0"
+    plugin_version = "1.0.0"
     # 插件作者
-    plugin_author = "开发者名称"
+    plugin_author = "xdormaelx"
     # 作者主页
     plugin_author_url = ""
     # 插件顺序

@@ -1,1 +1,335 @@
+import os
+import time
+import threading
+import logging
+import re
+from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass
+
+from app.plugins import PluginBase
+from app.schemas.types import EventType
+from app.core.config import settings
+from app.events import eventmanager, Event
+from app.helper.plugin_config import PluginConfigHelper
+from app.schemas.types import SystemConfigKey
+
+logger = logging.getLogger(__name__)
+
+@dataclass
+class PluginConfigModel:
+    """插件配置模型"""
+    monitor_dir: str = ""  # 监控目录路径
+    video_exts: str = "mp4,mkv,avi,ts"  # 视频文件扩展名
+    sub_exts: str = "ass,ssa,srt"  # 字幕文件扩展名
+
+class SubtitleRenamer:
+    """字幕文件重命名工具"""
+    
+    def rename_subtitle(self, sub_path: str, monitor_dir: str, video_exts: List[str]):
+        """
+        重命名字幕文件
+        
+        :param sub_path: 字幕文件路径
+        :param monitor_dir: 监控目录
+        :param video_exts: 视频文件扩展名列表
+        """
+        # 获取字幕文件名和扩展名
+        sub_name = os.path.basename(sub_path)
+        sub_base, sub_ext = os.path.splitext(sub_name)
+        
+        # 提取字幕文件中的季集信息
+        sub_episode = self.extract_episode_info(sub_base)
+        if not sub_episode:
+            logger.info(f"字幕文件 {sub_name} 中未找到季集信息，跳过处理")
+            return
+        
+        # 查找匹配的视频文件
+        video_file = self.find_matching_video(monitor_dir, video_exts, sub_episode)
+        if not video_file:
+            logger.info(f"未找到匹配的视频文件，字幕: {sub_episode}")
+            return
+        
+        # 生成新的字幕文件名
+        new_sub_name = self.generate_new_sub_name(video_file, sub_ext)
+        if not new_sub_name:
+            return
+        
+        # 重命名字幕文件
+        new_sub_path = os.path.join(monitor_dir, new_sub_name)
+        if os.path.exists(new_sub_path):
+            logger.warning(f"目标字幕文件已存在: {new_sub_name}")
+            return
+        
+        os.rename(sub_path, new_sub_path)
+        logger.info(f"字幕文件重命名成功: {sub_name} -> {new_sub_name}")
+    
+    def extract_episode_info(self, filename: str) -> Optional[str]:
+        """
+        从文件名中提取季集信息
+        
+        :param filename: 文件名（不含扩展名）
+        :return: 季集信息（如 S01E01），不区分大小写
+        """
+        # 匹配季集格式：SxxExx 或 sxxexx
+        pattern = r"[sS]\d{1,2}[eE]\d{1,2}"
+        match = re.search(pattern, filename)
+        if match:
+            return match.group().upper()  # 统一转为大写
+        return None
+    
+    def find_matching_video(self, directory: str, video_exts: List[str], episode: str) -> Optional[str]:
+        """
+        查找匹配的视频文件
+        
+        :param directory: 目录路径
+        :param video_exts: 视频扩展名列表
+        :param episode: 季集信息
+        :return: 匹配的视频文件名
+        """
+        for filename in os.listdir(directory):
+            # 检查文件扩展名
+            ext = os.path.splitext(filename)[-1].lstrip(".").lower()
+            if ext not in video_exts:
+                continue
+            
+            # 提取视频文件中的季集信息
+            file_base = os.path.splitext(filename)[0]
+            video_episode = self.extract_episode_info(file_base)
+            if not video_episode:
+                continue
+            
+            # 比较季集信息是否匹配
+            if video_episode == episode:
+                return filename
+        return None
+    
+    def generate_new_sub_name(self, video_file: str, sub_ext: str) -> Optional[str]:
+        """
+        生成新的字幕文件名
+        
+        :param video_file: 视频文件名
+        :param sub_ext: 字幕文件扩展名
+        :return: 新的字幕文件名
+        """
+        # 获取视频文件的主文件名（不含扩展名）
+        video_base = os.path.splitext(video_file)[0]
+        
+        # 生成新的字幕文件名
+        return f"{video_base}{sub_ext}"
+
+class AutoSubRename(PluginBase):
+    # 插件名称
+    plugin_name = "AutoSubRename"
+    # 插件描述
+    plugin_desc = "自动重命名匹配的字幕文件"
+    # 插件图标
+    plugin_icon = "rename.png"
+    # 插件版本
+    plugin_version = "1.0.0"
+    # 插件作者
+    plugin_author = "xdormaelx"
+    # 作者主页
+    plugin_author_url = ""
+    # 插件顺序
+    plugin_order = 1
+    # 可重用
+    reusable = True
+    
+    def __init__(self):
+        # 配置模型
+        self._config_model = PluginConfigModel
+        # 配置键
+        self._config_key = f"{settings.PLUGIN_NAME}:config"
+        # 系统配置键
+        self._system_key = SystemConfigKey.PluginConfig
+        # 当前配置
+        self._current_config = self._get_config()
+        # 监控目录
+        self._monitor_dir = ""
+        # 文件监控线程
+        self._thread = None
+        # 运行标志
+        self._running = False
+        # 重命名器实例
+        self._renamer = SubtitleRenamer()
+        # 已处理文件缓存
+        self._processed_files = set()
+    
+    def _get_config(self) -> PluginConfigModel:
+        """获取插件配置"""
+        config = PluginConfigHelper.get_plugin_config(
+            plugin_id=settings.PLUGIN_NAME,
+            config_key=self._config_key,
+            config_model=self._config_model,
+            system_key=self._system_key
+        )
+        return config or self._config_model()
+    
+    def init_plugin(self, config: Dict = None):
+        # 初始化配置
+        self._current_config = self._get_config()
+        self._monitor_dir = self._current_config.monitor_dir
+        
+        # 启动文件监控
+        if self._monitor_dir and os.path.exists(self._monitor_dir):
+            self._running = True
+            self._thread = threading.Thread(target=self.__monitor_files)
+            self._thread.daemon = True
+            self._thread.start()
+            logger.info(f"字幕自动重命名插件已启动，监控目录: {self._monitor_dir}")
+    
+    def get_state(self) -> bool:
+        return self._running
+    
+    def stop(self):
+        # 停止插件
+        self._running = False
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=3)
+        logger.info("字幕自动重命名插件已停止")
+    
+    def __monitor_files(self):
+        """
+        监控文件变化
+        """
+        while self._running:
+            try:
+                # 检查配置是否变化
+                new_config = self._get_config()
+                if new_config.monitor_dir != self._monitor_dir:
+                    self._monitor_dir = new_config.monitor_dir
+                    self._processed_files.clear()
+                    logger.info(f"监控目录已更新为: {self._monitor_dir}")
+                
+                # 扫描目录
+                self.__scan_directory()
+            except Exception as e:
+                logger.error(f"扫描目录失败: {str(e)}")
+            
+            # 每30秒扫描一次
+            time.sleep(30)
+    
+    def __scan_directory(self):
+        """
+        扫描监控目录中的字幕文件
+        """
+        if not self._monitor_dir or not os.path.exists(self._monitor_dir):
+            return
+        
+        # 获取配置
+        current_config = self._get_config()
+        video_exts = [ext.strip() for ext in current_config.video_exts.split(",") if ext.strip()]
+        sub_exts = [ext.strip() for ext in current_config.sub_exts.split(",") if ext.strip()]
+        
+        # 扫描目录
+        for filename in os.listdir(self._monitor_dir):
+            file_path = os.path.join(self._monitor_dir, filename)
+            
+            # 跳过目录
+            if os.path.isdir(file_path):
+                continue
+            
+            # 跳过已处理文件
+            if file_path in self._processed_files:
+                continue
+            
+            # 检查是否是字幕文件
+            file_ext = os.path.splitext(filename)[-1].lstrip(".").lower()
+            if file_ext not in sub_exts:
+                continue
+            
+            try:
+                # 处理字幕文件
+                self._renamer.rename_subtitle(
+                    file_path, 
+                    self._monitor_dir,
+                    video_exts
+                )
+                # 添加到已处理缓存
+                self._processed_files.add(file_path)
+            except Exception as e:
+                logger.error(f"处理文件 {filename} 失败: {str(e)}")
+    
+    @eventmanager.register(EventType.PluginReload)
+    def reload(self, event: Event):
+        """
+        插件重载事件
+        """
+        logger.info("插件配置已重载")
+        self.stop()
+        self.init_plugin()
+
+    @staticmethod
+    def get_command() -> [Dict]:
+        pass
+    
+    def get_api(self) -> [Dict]:
+        pass
+    
+    def get_form(self) -> [Dict]:
+        """
+        插件配置页面
+        """
+        return [
+            {
+                "component": "VForm",
+                "content": [
+                    {
+                        "component": "VRow",
+                        "content": [
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12},
+                                "content": [
+                                    {
+                                        "component": "VTextField",
+                                        "props": {
+                                            "model": "monitor_dir",
+                                            "label": "监控目录",
+                                            "placeholder": "请输入监控目录的绝对路径"
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "component": "VRow",
+                        "content": [
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 6},
+                                "content": [
+                                    {
+                                        "component": "VTextField",
+                                        "props": {
+                                            "model": "video_exts",
+                                            "label": "视频扩展名",
+                                            "placeholder": "多个用逗号分隔"
+                                        }
+                                    }
+                                ]
+                            },
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 6},
+                                "content": [
+                                    {
+                                        "component": "VTextField",
+                                        "props": {
+                                            "model": "sub_exts",
+                                            "label": "字幕扩展名",
+                                            "placeholder": "多个用逗号分隔"
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+
+    def get_page(self) -> [Dict]:
+        pass
 

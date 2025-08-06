@@ -10,7 +10,7 @@ from app.plugins import _PluginBase
 from app.schemas.types import EventType, SystemConfigKey
 from app.core.config import settings
 from app.core.event import eventmanager, Event
-from app.db.systemconfig_oper import SystemConfigOper  # 新增导入
+from app.db.systemconfig_oper import SystemConfigOper
 
 logger = logging.getLogger(__name__)
 
@@ -185,8 +185,8 @@ class AutoSubRename(_PluginBase):
     def get_state(self) -> bool:
         return self._running
     
-    def stop(self):
-        # 停止插件
+    def stop_service(self):  # 新增 stop_service 方法
+        """停止插件服务"""
         self._running = False
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=3)
@@ -262,7 +262,7 @@ class AutoSubRename(_PluginBase):
         # 检查事件是否针对本插件
         if event.event_data and event.event_data.get("plugin_id") == self.__class__.__name__:
             logger.info("插件配置已重载")
-            self.stop()
+            self.stop_service()  # 调用 stop_service 而不是 stop
             self.init_plugin()
 
     @staticmethod

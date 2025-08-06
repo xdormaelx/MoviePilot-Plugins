@@ -137,8 +137,8 @@ class AutoSubRename(_PluginBase):
     def __init__(self):
         # 配置模型
         self._config_model = PluginConfigModel
-        # 配置键
-        self._config_key = f"{settings.PLUGIN_NAME}:config"
+        # 配置键 - 使用插件类名作为前缀
+        self._config_key = f"{self.__class__.__name__}:config"
         # 当前配置
         self._current_config = self._get_config()
         # 监控目录
@@ -153,7 +153,7 @@ class AutoSubRename(_PluginBase):
         self._processed_files = set()
     
     def _get_config(self) -> PluginConfigModel:
-        """获取插件配置 - 使用 V2 的 ServiceConfigHelper 替代"""
+        """获取插件配置"""
         # 从系统配置中获取插件配置
         config_data = SystemConfigOper().get(self._config_key)
         
@@ -185,7 +185,7 @@ class AutoSubRename(_PluginBase):
     def get_state(self) -> bool:
         return self._running
     
-    def stop_service(self):  # 新增 stop_service 方法
+    def stop_service(self):
         """停止插件服务"""
         self._running = False
         if self._thread and self._thread.is_alive():
@@ -257,12 +257,12 @@ class AutoSubRename(_PluginBase):
     @eventmanager.register(EventType.PluginReload)
     def reload(self, event: Event):
         """
-        插件重载事件 - 使用 V2 的事件处理方式
+        插件重载事件
         """
         # 检查事件是否针对本插件
         if event.event_data and event.event_data.get("plugin_id") == self.__class__.__name__:
             logger.info("插件配置已重载")
-            self.stop_service()  # 调用 stop_service 而不是 stop
+            self.stop_service()
             self.init_plugin()
 
     @staticmethod

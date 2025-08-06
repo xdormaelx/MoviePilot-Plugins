@@ -3,15 +3,14 @@ import time
 import threading
 import logging
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 from dataclasses import dataclass
 
 from app.plugins import _PluginBase
-from app.schemas.types import EventType
+from app.schemas.types import EventType, SystemConfigKey
 from app.core.config import settings
 from app.core.event import eventmanager, Event
-from app.helper.plugin_config import PluginConfigHelper
-from app.schemas.types import SystemConfigKey
+from app.db.systemconfig_oper import SystemConfigOper  # 新增导入
 
 logger = logging.getLogger(__name__)
 
@@ -140,8 +139,6 @@ class AutoSubRename(_PluginBase):
         self._config_model = PluginConfigModel
         # 配置键
         self._config_key = f"{settings.PLUGIN_NAME}:config"
-        # 系统配置键
-        self._system_key = SystemConfigKey.PluginConfig
         # 当前配置
         self._current_config = self._get_config()
         # 监控目录
@@ -156,14 +153,19 @@ class AutoSubRename(_PluginBase):
         self._processed_files = set()
     
     def _get_config(self) -> PluginConfigModel:
-        """获取插件配置"""
-        config = PluginConfigHelper.get_plugin_config(
-            plugin_id=settings.PLUGIN_NAME,
-            config_key=self._config_key,
-            config_model=self._config_model,
-            system_key=self._system_key
+        """获取插件配置 - 使用 V2 的 ServiceConfigHelper 替代"""
+        # 从系统配置中获取插件配置
+        config_data = SystemConfigOper().get(self._config_key)
+        
+        if not config_data:
+            return self._config_model()
+        
+        # 将配置数据转换为配置模型
+        return PluginConfigModel(
+            monitor_dir=config_data.get("monitor_dir", ""),
+            video_exts=config_data.get("video_exts", "mp4,mkv,avi,ts"),
+            sub_exts=config_data.get("sub_exts", "ass,ssa,srt")
         )
-        return config or self._config_model()
     
     def init_plugin(self, config: Dict = None):
         # 初始化配置
@@ -177,6 +179,8 @@ class AutoSubRename(_PluginBase):
             self._thread.daemon = True
             self._thread.start()
             logger.info(f"字幕自动重命名插件已启动，监控目录: {self._monitor_dir}")
+        else:
+            logger.warning(f"监控目录配置无效或不存在: {self._monitor_dir}")
     
     def get_state(self) -> bool:
         return self._running
@@ -253,11 +257,13 @@ class AutoSubRename(_PluginBase):
     @eventmanager.register(EventType.PluginReload)
     def reload(self, event: Event):
         """
-        插件重载事件
+        插件重载事件 - 使用 V2 的事件处理方式
         """
-        logger.info("插件配置已重载")
-        self.stop()
-        self.init_plugin()
+        # 检查事件是否针对本插件
+        if event.event_data and event.event_data.get("plugin_id") == self.__class__.__name__:
+            logger.info("插件配置已重载")
+            self.stop()
+            self.init_plugin()
 
     @staticmethod
     def get_command() -> [Dict]:
@@ -332,4 +338,3 @@ class AutoSubRename(_PluginBase):
 
     def get_page(self) -> [Dict]:
         pass
-

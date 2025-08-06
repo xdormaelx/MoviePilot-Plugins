@@ -138,7 +138,7 @@ class AutoSubRename(_PluginBase):
         # 配置模型
         self._config_model = PluginConfigModel
         # 配置键
-        self._config_key = f"{self.plugin_name}:config"
+        self._config_key = f"{settings.PLUGIN_NAME}:config"
         # 当前配置
         self._current_config = self._get_config()
         # 监控目录
@@ -182,85 +182,13 @@ class AutoSubRename(_PluginBase):
         else:
             logger.warning(f"监控目录配置无效或不存在: {self._monitor_dir}")
     
-    def get_state(self) -> bool:
-        return self._running
-    
-    def stop_service(self):  # 新增 stop_service 方法
-        """停止插件服务"""
-        self._running = False
-        if self._thread and self._thread.is_alive():
-            self._thread.join(timeout=3)
-        logger.info("字幕自动重命名插件已停止")
-    
-    def __monitor_files(self):
-        """
-        监控文件变化
-        """
-        while self._running:
-            try:
-                # 检查配置是否变化
-                new_config = self._get_config()
-                if new_config.monitor_dir != self._monitor_dir:
-                    self._monitor_dir = new_config.monitor_dir
-                    self._processed_files.clear()
-                    logger.info(f"监控目录已更新为: {self._monitor_dir}")
-                
-                # 扫描目录
-                self.__scan_directory()
-            except Exception as e:
-                logger.error(f"扫描目录失败: {str(e)}")
-            
-            # 每30秒扫描一次
-            time.sleep(30)
-    
-    def __scan_directory(self):
-        """
-        扫描监控目录中的字幕文件
-        """
-        if not self._monitor_dir or not os.path.exists(self._monitor_dir):
-            return
-        
-        # 获取配置
-        current_config = self._get_config()
-        video_exts = [ext.strip() for ext in current_config.video_exts.split(",") if ext.strip()]
-        sub_exts = [ext.strip() for ext in current_config.sub_exts.split(",") if ext.strip()]
-        
-        # 扫描目录
-        for filename in os.listdir(self._monitor_dir):
-            file_path = os.path.join(self._monitor_dir, filename)
-            
-            # 跳过目录
-            if os.path.isdir(file_path):
-                continue
-            
-            # 跳过已处理文件
-            if file_path in self._processed_files:
-                continue
-            
-            # 检查是否是字幕文件
-            file_ext = os.path.splitext(filename)[-1].lstrip(".").lower()
-            if file_ext not in sub_exts:
-                continue
-            
-            try:
-                # 处理字幕文件
-                self._renamer.rename_subtitle(
-                    file_path, 
-                    self._monitor_dir,
-                    video_exts
-                )
-                # 添加到已处理缓存
-                self._processed_files.add(file_path)
-            except Exception as e:
-                logger.error(f"处理文件 {filename} 失败: {str(e)}")
-    
     @eventmanager.register(EventType.PluginReload)
     def reload(self, event: Event):
         """
         插件重载事件 - 使用 V2 的事件处理方式
         """
         # 检查事件是否针对本插件
-        if event.event_data and event.event_data.get("plugin_id") == self.__class__.__name__:
+        if event.event_data and event.event_data.get("plugin_id") == self.plugin_name:
             logger.info("插件配置已重载")
             self.stop_service()  # 调用 stop_service 而不是 stop
             self.init_plugin()

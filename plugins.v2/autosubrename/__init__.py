@@ -273,4 +273,5 @@ class AutoSubRename(_PluginBase):
     def stop_service(self):
         self._running = False
         if self._thread and self._thread.is_alive():
-            self._thread.join()
+            self._thread.join(timeout=5)
+            logger.info("插件服务已停止")

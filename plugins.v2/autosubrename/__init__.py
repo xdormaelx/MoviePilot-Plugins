@@ -138,7 +138,7 @@ class AutoSubRename(_PluginBase):
         # 配置模型
         self._config_model = PluginConfigModel
         # 配置键
-        self._config_key = f"{settings.PLUGIN_NAME}:config"
+        self._config_key = f"{self.plugin_name}:config"
         # 当前配置
         self._current_config = self._get_config()
         # 监控目录

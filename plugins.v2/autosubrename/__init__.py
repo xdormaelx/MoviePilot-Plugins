@@ -137,7 +137,7 @@ class AutoSubRename(_PluginBase):
     def __init__(self):
         # 配置模型
         self._config_model = PluginConfigModel
-        # 配置键
+        # 配置键 - 使用插件名称而非settings.PLUGIN_NAME
         self._config_key = f"{self.plugin_name}:config"
         # 当前配置
         self._current_config = self._get_config()
@@ -153,7 +153,7 @@ class AutoSubRename(_PluginBase):
         self._processed_files = set()
     
     def _get_config(self) -> PluginConfigModel:
-        """获取插件配置 - 使用 V2 的 ServiceConfigHelper 替代"""
+        """获取插件配置 - 使用插件名称而非settings.PLUGIN_NAME"""
         # 从系统配置中获取插件配置
         config_data = SystemConfigOper().get(self._config_key)
         
@@ -178,18 +178,18 @@ class AutoSubRename(_PluginBase):
             self._thread = threading.Thread(target=self.__monitor_files)
             self._thread.daemon = True
             self._thread.start()
-            logger.info(f"字幕自动重命名插件已启动，监控目录: {self._monitor_dir}")
+            logger.info(f"{self.plugin_name} 插件已启动，监控目录: {self._monitor_dir}")
         else:
             logger.warning(f"监控目录配置无效或不存在: {self._monitor_dir}")
     
     @eventmanager.register(EventType.PluginReload)
     def reload(self, event: Event):
         """
-        插件重载事件 - 使用 V2 的事件处理方式
+        插件重载事件 - 使用插件名称而非settings.PLUGIN_NAME
         """
         # 检查事件是否针对本插件
         if event.event_data and event.event_data.get("plugin_id") == self.plugin_name:
-            logger.info("插件配置已重载")
+            logger.info(f"{self.plugin_name} 插件配置已重载")
             self.stop_service()  # 调用 stop_service 而不是 stop
             self.init_plugin()
 
@@ -274,4 +274,51 @@ class AutoSubRename(_PluginBase):
         self._running = False
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=5)
-            logger.info("插件服务已停止")
+            logger.info(f"{self.plugin_name} 插件服务已停止")
+    
+    def __monitor_files(self):
+        """
+        文件监控线程函数
+        """
+        # 初始化视频和字幕扩展名列表
+        video_extensions = [ext.strip().lower() for ext in self._current_config.video_exts.split(",")]
+        sub_extensions = [ext.strip().lower() for ext in self._current_config.sub_exts.split(",")]
+        
+        logger.info(f"{self.plugin_name} 开始监控目录: {self._monitor_dir}")
+        logger.info(f"视频扩展名: {video_extensions}")
+        logger.info(f"字幕扩展名: {sub_extensions}")
+        
+        while self._running:
+            try:
+                # 扫描目录中的所有文件
+                for filename in os.listdir(self._monitor_dir):
+                    file_path = os.path.join(self._monitor_dir, filename)
+                    
+                    # 跳过目录
+                    if os.path.isdir(file_path):
+                        continue
+                    
+                    # 检查文件是否已处理过
+                    if file_path in self._processed_files:
+                        continue
+                    
+                    # 获取文件扩展名
+                    _, file_ext = os.path.splitext(filename)
+                    ext = file_ext.lstrip(".").lower()
+                    
+                    # 处理字幕文件
+                    if ext in sub_extensions:
+                        logger.info(f"发现新的字幕文件: {filename}")
+                        self._renamer.rename_subtitle(
+                            sub_path=file_path,
+                            monitor_dir=self._monitor_dir,
+                            video_exts=video_extensions
+                        )
+                        self._processed_files.add(file_path)
+                
+                # 每30秒扫描一次
+                time.sleep(30)
+                
+            except Exception as e:
+                logger.error(f"{self.plugin_name} 监控线程发生错误: {str(e)}")
+                time.sleep(60)

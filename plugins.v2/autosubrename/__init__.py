@@ -266,3 +266,11 @@ class AutoSubRename(_PluginBase):
 
     def get_page(self) -> [Dict]:
         pass
+    
+    def get_state(self) -> bool:
+        return self._running
+
+    def stop_service(self):
+        self._running = False
+        if self._thread and self._thread.is_alive():
+            self._thread.join()

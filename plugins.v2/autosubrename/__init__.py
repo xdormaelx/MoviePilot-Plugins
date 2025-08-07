@@ -571,26 +571,8 @@ class AutoSubRename(_PluginBase):
         }
 
     def get_page(self) -> List[dict]:
-        """主页面实现 - 直接显示配置表单"""
-        return [
-            {
-                "component": "VCard",
-                "content": [
-                    {
-                        "component": "VCardTitle",
-                        "props": {
-                            "class": "pa-0"
-                        },
-                        "text": self.plugin_name
-                    },
-                    {
-                        "component": "VCardText",
-                        "content": self.get_form()[0]  # 直接使用配置表单组件
-                    }
-                ]
-            }
-        ]
-
+        pass
+        
     def get_state(self) -> bool:
         return self._current_config.enabled
 

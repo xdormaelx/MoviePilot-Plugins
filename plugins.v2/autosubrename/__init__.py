@@ -4,7 +4,7 @@ import threading
 import logging
 import re
 from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from app.plugins import _PluginBase
 from app.schemas.types import EventType, SystemConfigKey, NotificationType
@@ -139,7 +139,7 @@ class AutoSubRename(_PluginBase):
     # 插件图标
     plugin_icon = "rename.png"
     # 插件版本
-    plugin_version = "1.1.1"
+    plugin_version = "1.0.0"
     # 插件作者
     plugin_author = "xdormaelx"
     # 作者主页
@@ -186,11 +186,24 @@ class AutoSubRename(_PluginBase):
         )
     
     def init_plugin(self, config: Dict = None):
-        # 初始化配置
-        self._current_config = self._get_config()
+        # 如果有新的配置传入，更新当前配置
+        if config:
+            self._current_config = PluginConfigModel(
+                enabled=config.get("enabled", False),
+                notify=config.get("notify", False),
+                onlyonce=config.get("onlyonce", False),
+                monitor_dirs=config.get("monitor_dirs", ""),
+                video_exts=config.get("video_exts", "mp4,mkv,avi,ts"),
+                sub_exts=config.get("sub_exts", "ass,ssa,srt")
+            )
+            # 保存新配置
+            self.__update_config()
         
         # 解析监控目录
         self._monitor_dirs = [d.strip() for d in self._current_config.monitor_dirs.split("\n") if d.strip()]
+        
+        # 停止任何正在运行的服务
+        self.stop_service()
         
         # 处理立即运行
         if self._current_config.onlyonce:
@@ -200,17 +213,9 @@ class AutoSubRename(_PluginBase):
             self._current_config.onlyonce = False
             self.__update_config()
         
-        # 启动文件监控
+        # 如果插件已启用且有监控目录，启动服务
         if self._current_config.enabled and self._monitor_dirs:
-            self._running = True
-            self._thread = threading.Thread(target=self.__monitor_files)
-            self._thread.daemon = True
-            self._thread.start()
-            logger.info(f"{self.plugin_name} 插件已启动，监控目录: {self._monitor_dirs}")
-        elif self._current_config.enabled and not self._monitor_dirs:
-            logger.warning(f"{self.plugin_name} 已启用但未配置监控目录")
-        else:
-            logger.info(f"{self.plugin_name} 插件未启用")
+            self.start_service()
     
     def __update_config(self):
         """更新配置到数据库"""
@@ -223,6 +228,18 @@ class AutoSubRename(_PluginBase):
             "sub_exts": self._current_config.sub_exts
         }
         SystemConfigOper().set(self._config_key, config_data)
+    
+    def start_service(self):
+        """启动监控服务"""
+        if self._running:
+            return
+            
+        logger.info(f"{self.plugin_name} 启动监控服务...")
+        self._running = True
+        self._thread = threading.Thread(target=self.__monitor_files)
+        self._thread.daemon = True
+        self._thread.start()
+        logger.info(f"{self.plugin_name} 插件已启动，监控目录: {self._monitor_dirs}")
     
     def batch_rename(self):
         """批量重命名所有监控目录中的字幕文件"""
@@ -416,12 +433,12 @@ class AutoSubRename(_PluginBase):
                 ]
             }
         ], {
-            "enabled": False,
-            "notify": False,
-            "onlyonce": False,
-            "monitor_dirs": "",
-            "video_exts": "mp4,mkv,avi,ts",
-            "sub_exts": "ass,ssa,srt"
+            "enabled": self._current_config.enabled,
+            "notify": self._current_config.notify,
+            "onlyonce": self._current_config.onlyonce,
+            "monitor_dirs": self._current_config.monitor_dirs,
+            "video_exts": self._current_config.video_exts,
+            "sub_exts": self._current_config.sub_exts
         }
 
     def get_page(self) -> List[Dict]:
@@ -431,10 +448,16 @@ class AutoSubRename(_PluginBase):
         return self._current_config.enabled
 
     def stop_service(self):
+        """停止监控服务"""
+        if not self._running:
+            return
+            
+        logger.info(f"{self.plugin_name} 停止监控服务...")
         self._running = False
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=5)
-            logger.info(f"{self.plugin_name} 插件服务已停止")
+        self._thread = None
+        logger.info(f"{self.plugin_name} 插件服务已停止")
     
     def __monitor_files(self):
         """
@@ -454,6 +477,9 @@ class AutoSubRename(_PluginBase):
                         
                     # 扫描目录中的所有文件
                     for filename in os.listdir(monitor_dir):
+                        if not self._running:
+                            return
+                            
                         file_path = os.path.join(monitor_dir, filename)
                         
                         # 跳过目录
@@ -488,7 +514,10 @@ class AutoSubRename(_PluginBase):
                             self._processed_files.add(file_path)
                 
                 # 每30秒扫描一次
-                time.sleep(30)
+                for _ in range(30):
+                    if not self._running:
+                        return
+                    time.sleep(1)
                 
             except Exception as e:
                 logger.error(f"{self.plugin_name} 监控线程发生错误: {str(e)}")

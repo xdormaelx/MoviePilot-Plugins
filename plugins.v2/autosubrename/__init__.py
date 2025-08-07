@@ -564,6 +564,7 @@ class AutoSubRename(_PluginBase):
         }
 
     def get_page(self) -> List[Dict]:
+        pass
         """主页面（显示日志）"""
         # 获取最近50条日志
         log_records = []

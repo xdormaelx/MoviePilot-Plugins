@@ -544,7 +544,7 @@ class AutoSubRename(_PluginBase):
 
     def get_page(self) -> List[Dict]:
         """主页面（已移除）"""
-        return []
+        pass
 
     def get_state(self) -> bool:
         return self._current_config.enabled

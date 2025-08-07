@@ -15,7 +15,7 @@ from app.core.config import settings
 from app.core.event import eventmanager, Event
 from app.db.systemconfig_oper import SystemConfigOper
 from app.log import logger
-from app.chain.media import MediaChain  # 添加媒体链
+from app.chain.media import MediaChain
 
 @dataclass
 class PluginConfigModel:
@@ -158,7 +158,7 @@ class AutoSubRename(_PluginBase):
     # 插件图标
     plugin_icon = "rename.png"
     # 插件版本
-    plugin_version = "1.0.1"  # 更新版本号
+    plugin_version = "1.0.1"
     # 插件作者
     plugin_author = "xdormaelx"
     # 作者主页
@@ -187,7 +187,7 @@ class AutoSubRename(_PluginBase):
         self._processed_files = set()
         # 批量处理线程
         self._batch_thread = None
-        # 添加链对象
+        # 媒体链对象
         self.chain = MediaChain()
 
     def _get_config(self) -> PluginConfigModel:
@@ -571,11 +571,23 @@ class AutoSubRename(_PluginBase):
         }
 
     def get_page(self) -> List[dict]:
-        """主页面改为配置页面"""
+        """主页面实现 - 直接显示配置表单"""
         return [
             {
-                "component": "VForm",
-                "content": self.get_form()[0]  # 直接返回配置表单组件
+                "component": "VCard",
+                "content": [
+                    {
+                        "component": "VCardTitle",
+                        "props": {
+                            "class": "pa-0"
+                        },
+                        "text": self.plugin_name
+                    },
+                    {
+                        "component": "VCardText",
+                        "content": self.get_form()[0]  # 直接使用配置表单组件
+                    }
+                ]
             }
         ]
 

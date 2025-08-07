@@ -151,13 +151,13 @@ class SubtitleMonitorHandler(FileSystemEventHandler):
 
 class AutoSubRename(_PluginBase):
     # 插件名称
-    plugin_name = "剧集字幕重命名"
+    plugin_name = "字幕自动重命名"
     # 插件描述
     plugin_desc = "自动重命名匹配的字幕文件"
     # 插件图标
     plugin_icon = "rename.png"
     # 插件版本
-    plugin_version = "1.0.0"
+    plugin_version = "1.2.0"
     # 插件作者
     plugin_author = "xdormaelx"
     # 作者主页
@@ -184,6 +184,8 @@ class AutoSubRename(_PluginBase):
         self._renamer = SubtitleRenamer()
         # 已处理文件缓存
         self._processed_files = set()
+        # 批量处理线程
+        self._batch_thread = None
     
     def _get_config(self) -> PluginConfigModel:
         """获取插件配置"""
@@ -226,14 +228,23 @@ class AutoSubRename(_PluginBase):
         # 处理立即运行
         if self._current_config.onlyonce:
             logger.info("执行立即运行一次")
-            self.batch_rename()
-            # 重置立即运行标志
-            self._current_config.onlyonce = False
-            self.__update_config()
+            # 启动线程执行批量重命名
+            self._batch_thread = threading.Thread(target=self._batch_rename_thread)
+            self._batch_thread.daemon = True
+            self._batch_thread.start()
         
         # 如果插件已启用且有监控目录，启动服务
         if self._current_config.enabled and self._monitor_dirs:
             self.start_service()
+    
+    def _batch_rename_thread(self):
+        """异步执行批量重命名"""
+        try:
+            self.batch_rename()
+        finally:
+            # 重置立即运行标志
+            self._current_config.onlyonce = False
+            self.__update_config()
     
     def __update_config(self):
         """更新配置到数据库"""
@@ -289,23 +300,26 @@ class AutoSubRename(_PluginBase):
         if ext not in sub_exts:
             return
             
-        # 重命名字幕文件
-        video_exts = [e.strip().lower() for e in self._current_config.video_exts.split(",")]
-        success, msg = self._renamer.rename_subtitle(
-            sub_path=sub_path,
-            video_dir=sub_dir,  # 在字幕文件所在目录查找视频
-            video_exts=video_exts
-        )
-        
-        # 处理结果
-        if success:
-            self._processed_files.add(sub_path)
-            if self._current_config.notify:
-                self.post_message(
-                    mtype=NotificationType.Plugin,
-                    title=f"【{self.plugin_name}】字幕重命名",
-                    text=msg
-                )
+        try:
+            # 重命名字幕文件
+            video_exts = [e.strip().lower() for e in self._current_config.video_exts.split(",")]
+            success, msg = self._renamer.rename_subtitle(
+                sub_path=sub_path,
+                video_dir=sub_dir,  # 在字幕文件所在目录查找视频
+                video_exts=video_exts
+            )
+            
+            # 处理结果
+            if success:
+                self._processed_files.add(sub_path)
+                if self._current_config.notify:
+                    self.post_message(
+                        mtype=NotificationType.Plugin,
+                        title=f"【{self.plugin_name}】字幕重命名",
+                        text=msg
+                    )
+        except Exception as e:
+            logger.error(f"处理字幕文件时出错: {str(e)}")
     
     def batch_rename(self):
         """批量重命名所有监控目录中的字幕文件"""
@@ -333,14 +347,18 @@ class AutoSubRename(_PluginBase):
                     
                     # 处理字幕文件
                     if ext in sub_exts:
-                        success, msg = self._renamer.rename_subtitle(
-                            sub_path=file_path,
-                            video_dir=root,  # 在当前目录查找视频
-                            video_exts=video_exts
-                        )
-                        results.append(msg)
-                        if success:
-                            self._processed_files.add(file_path)
+                        try:
+                            success, msg = self._renamer.rename_subtitle(
+                                sub_path=file_path,
+                                video_dir=root,  # 在当前目录查找视频
+                                video_exts=video_exts
+                            )
+                            results.append(msg)
+                            if success:
+                                self._processed_files.add(file_path)
+                        except Exception as e:
+                            logger.error(f"处理字幕文件 {file_path} 时出错: {str(e)}")
+                            results.append(f"处理字幕文件 {file_path} 时出错: {str(e)}")
         
         # 发送通知
         if self._current_config.notify and results:
@@ -385,7 +403,10 @@ class AutoSubRename(_PluginBase):
     
     def batch_rename_api(self) -> dict:
         """API批量重命名"""
-        self.batch_rename()
+        # 启动线程执行批量重命名
+        self._batch_thread = threading.Thread(target=self.batch_rename)
+        self._batch_thread.daemon = True
+        self._batch_thread.start()
         return {"code": 0, "msg": "批量重命名操作已启动"}
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
@@ -524,7 +545,7 @@ class AutoSubRename(_PluginBase):
                                         "props": {
                                             "type": "info",
                                             "variant": "tonal",
-                                            "text": "点击'立即运行一次'会对所有监控目录及其子目录执行一次批量重命名操作，完成后自动关闭该选项。"
+                                            "text": "点击'立即运行一次'会启动后台任务处理所有字幕文件，完成后自动关闭该选项。"
                                         }
                                     }
                                 ]
@@ -543,8 +564,38 @@ class AutoSubRename(_PluginBase):
         }
 
     def get_page(self) -> List[Dict]:
-        """主页面（已移除）"""
-        pass
+        """主页面（显示日志）"""
+        # 获取最近50条日志
+        log_records = []
+        for record in logger.get_logger().records:
+            if self.plugin_name in record.message:
+                log_records.append({
+                    "time": record.time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "level": record.level,
+                    "message": record.message
+                })
+        
+        # 只保留最近50条
+        log_records = log_records[-50:]
+        
+        return [
+            {
+                "component": "VCard",
+                "content": [
+                    {
+                        "component": "VTable",
+                        "props": {
+                            "headers": [
+                                {"text": "时间", "value": "time", "sortable": True},
+                                {"text": "级别", "value": "level", "sortable": True},
+                                {"text": "消息", "value": "message"}
+                            ],
+                            "items": log_records
+                        }
+                    }
+                ]
+            }
+        ]
 
     def get_state(self) -> bool:
         return self._current_config.enabled

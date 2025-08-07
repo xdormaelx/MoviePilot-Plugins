@@ -564,38 +564,7 @@ class AutoSubRename(_PluginBase):
         }
 
     def get_page(self) -> List[Dict]:
-        """主页面（显示日志）"""
-        # 获取最近50条日志
-        log_records = []
-        for record in logger.get_logger().records:
-            if self.plugin_name in record.message:
-                log_records.append({
-                    "time": record.time.strftime("%Y-%m-%d %H:%M:%S"),
-                    "level": record.level,
-                    "message": record.message
-                })
-        
-        # 只保留最近50条
-        log_records = log_records[-50:]
-        
-        return [
-            {
-                "component": "VCard",
-                "content": [
-                    {
-                        "component": "VTable",
-                        "props": {
-                            "headers": [
-                                {"text": "时间", "value": "time", "sortable": True},
-                                {"text": "级别", "value": "level", "sortable": True},
-                                {"text": "消息", "value": "message"}
-                            ],
-                            "items": log_records
-                        }
-                    }
-                ]
-            }
-        ]
+        pass
 
     def get_state(self) -> bool:
         return self._current_config.enabled

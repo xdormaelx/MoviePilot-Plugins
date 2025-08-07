@@ -15,7 +15,6 @@ from app.core.config import settings
 from app.core.event import eventmanager, Event
 from app.db.systemconfig_oper import SystemConfigOper
 from app.log import logger
-from app.chain.media import MediaChain
 
 @dataclass
 class PluginConfigModel:
@@ -158,7 +157,7 @@ class AutoSubRename(_PluginBase):
     # 插件图标
     plugin_icon = "rename.png"
     # 插件版本
-    plugin_version = "1.0.1"
+    plugin_version = "1.0.0"
     # 插件作者
     plugin_author = "xdormaelx"
     # 作者主页
@@ -187,9 +186,7 @@ class AutoSubRename(_PluginBase):
         self._processed_files = set()
         # 批量处理线程
         self._batch_thread = None
-        # 媒体链对象
-        self.chain = MediaChain()
-
+    
     def _get_config(self) -> PluginConfigModel:
         """获取插件配置"""
         # 从系统配置中获取插件配置
@@ -244,13 +241,10 @@ class AutoSubRename(_PluginBase):
         """异步执行批量重命名"""
         try:
             self.batch_rename()
-        except Exception as e:
-            logger.error(f"批量重命名失败: {str(e)}")
         finally:
-            # 确保重置立即运行标志
+            # 重置立即运行标志
             self._current_config.onlyonce = False
             self.__update_config()
-            logger.info("立即运行任务已完成，状态已重置")
     
     def __update_config(self):
         """更新配置到数据库"""
@@ -319,12 +313,11 @@ class AutoSubRename(_PluginBase):
             if success:
                 self._processed_files.add(sub_path)
                 if self._current_config.notify:
-                    # 使用事件管理器发送通知
-                    eventmanager.send_event(EventType.NoticeMessage, {
-                        'channel': NotificationType.Plugin,
-                        'title': f"【{self.plugin_name}】字幕重命名",
-                        'text': msg
-                    })
+                    self.post_message(
+                        mtype=NotificationType.Plugin,
+                        title=f"【{self.plugin_name}】字幕重命名",
+                        text=msg
+                    )
         except Exception as e:
             logger.error(f"处理字幕文件时出错: {str(e)}")
     
@@ -372,11 +365,11 @@ class AutoSubRename(_PluginBase):
             success_count = sum("成功" in r for r in results)
             fail_count = len(results) - success_count
             summary = f"批量重命名完成: 成功 {success_count} 个, 失败 {fail_count} 个"
-            eventmanager.send_event(EventType.NoticeMessage, {
-                'channel': NotificationType.Plugin,
-                'title': f"【{self.plugin_name}】批量重命名结果",
-                'text': f"{summary}\n\n详细结果:\n" + "\n".join(results)
-            })
+            self.post_message(
+                mtype=NotificationType.Plugin,
+                title=f"【{self.plugin_name}】批量重命名结果",
+                text=f"{summary}\n\n详细结果:\n" + "\n".join(results)
+            )
         
         logger.info("批量重命名完成")
     
@@ -570,9 +563,40 @@ class AutoSubRename(_PluginBase):
             "sub_exts": self._current_config.sub_exts
         }
 
-    def get_page(self) -> List[dict]:
-        pass
+    def get_page(self) -> List[Dict]:
+        """主页面（显示日志）"""
+        # 获取最近50条日志
+        log_records = []
+        for record in logger.get_logger().records:
+            if self.plugin_name in record.message:
+                log_records.append({
+                    "time": record.time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "level": record.level,
+                    "message": record.message
+                })
         
+        # 只保留最近50条
+        log_records = log_records[-50:]
+        
+        return [
+            {
+                "component": "VCard",
+                "content": [
+                    {
+                        "component": "VTable",
+                        "props": {
+                            "headers": [
+                                {"text": "时间", "value": "time", "sortable": True},
+                                {"text": "级别", "value": "level", "sortable": True},
+                                {"text": "消息", "value": "message"}
+                            ],
+                            "items": log_records
+                        }
+                    }
+                ]
+            }
+        ]
+
     def get_state(self) -> bool:
         return self._current_config.enabled
 

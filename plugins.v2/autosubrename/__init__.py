@@ -3,7 +3,7 @@ import time
 import threading
 import logging
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 
 from app.plugins import _PluginBase
@@ -11,7 +11,6 @@ from app.schemas.types import EventType, SystemConfigKey, NotificationType
 from app.core.config import settings
 from app.core.event import eventmanager, Event
 from app.db.systemconfig_oper import SystemConfigOper
-from app.utils.string import StringUtils
 from app.log import logger
 
 @dataclass
@@ -140,7 +139,7 @@ class AutoSubRename(_PluginBase):
     # 插件图标
     plugin_icon = "rename.png"
     # 插件版本
-    plugin_version = "1.1.0"
+    plugin_version = "1.1.1"
     # 插件作者
     plugin_author = "xdormaelx"
     # 作者主页

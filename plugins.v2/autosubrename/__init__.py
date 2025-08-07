@@ -13,6 +13,8 @@ from app.plugins import _PluginBase
 from app.schemas.types import EventType, SystemConfigKey, NotificationType
 from app.core.config import settings
 from app.core.event import eventmanager, Event
+from app.core.context import MediaInfo
+from app.chain.media import MediaChain
 from app.db.systemconfig_oper import SystemConfigOper
 from app.log import logger
 
@@ -28,6 +30,9 @@ class PluginConfigModel:
 
 class SubtitleRenamer:
     """字幕文件重命名工具"""
+    
+    def __init__(self, media_chain: MediaChain):
+        self.media_chain = media_chain
     
     def rename_subtitle(self, sub_path: str, video_dir: str, video_exts: List[str]) -> Tuple[bool, str]:
         """
@@ -56,8 +61,23 @@ class SubtitleRenamer:
             logger.info(msg)
             return False, msg
             
+        # 获取视频文件名（不含扩展名）
+        video_base = os.path.splitext(video_file)[0]
+        
+        # 识别媒体信息
+        try:
+            media_info: MediaInfo = self.media_chain.recognize_by_title(title=video_base)
+            if not media_info:
+                msg = f"无法识别媒体信息: {video_base}"
+                logger.warning(msg)
+                return False, msg
+        except Exception as e:
+            msg = f"媒体识别失败: {str(e)}"
+            logger.error(msg)
+            return False, msg
+        
         # 生成新的字幕文件名
-        new_sub_name = self.generate_new_sub_name(video_file, sub_ext)
+        new_sub_name = self.generate_new_sub_name(media_info, sub_ext)
         if not new_sub_name:
             msg = f"无法生成新的字幕文件名"
             logger.warning(msg)
@@ -120,19 +140,20 @@ class SubtitleRenamer:
                 return filename
         return None
     
-    def generate_new_sub_name(self, video_file: str, sub_ext: str) -> Optional[str]:
+    def generate_new_sub_name(self, media_info: MediaInfo, sub_ext: str) -> Optional[str]:
         """
         生成新的字幕文件名
         
-        :param video_file: 视频文件名
+        :param media_info: 媒体信息对象
         :param sub_ext: 字幕文件扩展名
         :return: 新的字幕文件名
         """
-        # 获取视频文件的主文件名（不含扩展名）
-        video_base = os.path.splitext(video_file)[0]
+        # 生成标准化的文件名格式
+        title = StringUtils.format_name(media_info.title)  # 格式化标题
+        season_ep = media_info.get_season_episode_string()  # 获取季集信息
         
         # 生成新的字幕文件名
-        return f"{video_base}{sub_ext}"
+        return f"{title} - {season_ep}{sub_ext}"
 
 class SubtitleMonitorHandler(FileSystemEventHandler):
     """字幕文件监控处理器"""
@@ -153,11 +174,11 @@ class AutoSubRename(_PluginBase):
     # 插件名称
     plugin_name = "剧集字幕重命名"
     # 插件描述
-    plugin_desc = "自动重命名匹配的字幕文件"
+    plugin_desc = "自动重命名匹配的字幕文件，使用媒体信息标准化名称"
     # 插件图标
     plugin_icon = "rename.png"
     # 插件版本
-    plugin_version = "1.0.1"
+    plugin_version = "1.1.0"
     # 插件作者
     plugin_author = "xdormaelx"
     # 作者主页
@@ -174,6 +195,8 @@ class AutoSubRename(_PluginBase):
         self._config_key = f"{self.plugin_name}:config"
         # 当前配置
         self._current_config = self._get_config()
+        # 媒体识别链
+        self.media_chain = None
         # 监控目录列表
         self._monitor_dirs = []
         # 文件监控观察者列表
@@ -181,11 +204,13 @@ class AutoSubRename(_PluginBase):
         # 运行标志
         self._running = False
         # 重命名器实例
-        self._renamer = SubtitleRenamer()
+        self._renamer = None
         # 已处理文件缓存
         self._processed_files = set()
         # 批量处理线程
         self._batch_thread = None
+        # 名称缓存
+        self._name_cache = {}
     
     def _get_config(self) -> PluginConfigModel:
         """获取插件配置"""
@@ -206,6 +231,12 @@ class AutoSubRename(_PluginBase):
         )
     
     def init_plugin(self, config: Dict = None):
+        # 初始化媒体识别链
+        self.media_chain = MediaChain()
+        
+        # 初始化重命名器
+        self._renamer = SubtitleRenamer(self.media_chain)
+        
         # 如果有新的配置传入，更新当前配置
         if config:
             self._current_config = PluginConfigModel(
@@ -332,6 +363,7 @@ class AutoSubRename(_PluginBase):
         sub_exts = [ext.strip().lower() for ext in self._current_config.sub_exts.split(",")]
         
         results = []
+        success_count = 0
         for monitor_dir in self._monitor_dirs:
             if not os.path.exists(monitor_dir):
                 logger.warning(f"监控目录不存在: {monitor_dir}")
@@ -356,14 +388,15 @@ class AutoSubRename(_PluginBase):
                             results.append(msg)
                             if success:
                                 self._processed_files.add(file_path)
+                                success_count += 1
                         except Exception as e:
                             logger.error(f"处理字幕文件 {file_path} 时出错: {str(e)}")
                             results.append(f"处理字幕文件 {file_path} 时出错: {str(e)}")
         
         # 发送通知
         if self._current_config.notify and results:
-            success_count = sum("成功" in r for r in results)
-            fail_count = len(results) - success_count
+            total_count = len(results)
+            fail_count = total_count - success_count
             summary = f"批量重命名完成: 成功 {success_count} 个, 失败 {fail_count} 个"
             self.post_message(
                 mtype=NotificationType.Plugin,
@@ -384,30 +417,11 @@ class AutoSubRename(_PluginBase):
             self.stop_service()
             self.init_plugin()
 
-    @eventmanager.register(EventType.PluginAction)
-    def handle_command(self, event: Event):
-        """
-        响应远程命令
-        """
-        if not event.event_data or event.event_data.get("action") != "batch_rename":
-            return
-        # 执行批量重命名
-        self.batch_rename()
-        # 发送响应消息
-        if event.event_data.get("channel") and event.event_data.get("user"):
-            self.post_message(
-                channel=event.event_data.get("channel"),
-                userid=event.event_data.get("user"),
-                title="【字幕重命名】操作结果",
-                text="批量重命名已执行完成"
-            )
-
     def get_command(self) -> List[Dict[str, Any]]:
         return [{
             "cmd": "/subrename",
             "event": EventType.PluginAction,
             "desc": "字幕重命名",
-            "category": "",
             "data": {"action": "batch_rename"}
         }]
 
@@ -532,26 +546,77 @@ class AutoSubRename(_PluginBase):
                                 ]
                             }
                         ]
+                    },
+                    {
+                        "component": "VRow",
+                        "content": [
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12},
+                                "content": [
+                                    {
+                                        "component": "VAlert",
+                                        "props": {
+                                            "type": "info",
+                                            "variant": "tonal",
+                                            "text": "启用插件后，会自动监控目录及其所有子目录中的字幕文件，并与同目录下的视频文件进行匹配重命名。"
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "component": "VRow",
+                        "content": [
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12},
+                                "content": [
+                                    {
+                                        "component": "VAlert",
+                                        "props": {
+                                            "type": "info",
+                                            "variant": "tonal",
+                                            "text": "点击'立即运行一次'会启动后台任务处理所有字幕文件，完成后自动关闭该选项。"
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
                     }
                 ]
             }
         ], {
-            "enabled": False,
-            "notify": False,
-            "onlyonce": False,
-            "monitor_dirs": "",
-            "video_exts": "mp4,mkv,avi,ts",
-            "sub_exts": "ass,ssa,srt"
+            "enabled": self._current_config.enabled,
+            "notify": self._current_config.notify,
+            "onlyonce": self._current_config.onlyonce,
+            "monitor_dirs": self._current_config.monitor_dirs,
+            "video_exts": self._current_config.video_exts,
+            "sub_exts": self._current_config.sub_exts
         }
+
+    def get_page(self) -> List[Dict]:
+        pass
+
+    def get_state(self) -> bool:
+        return self._current_config.enabled
 
     def stop_service(self):
         """停止监控服务"""
-        if self._observer:
-            for observer in self._observer:
-                try:
-                    observer.stop()
-                    observer.join()
-                except Exception as e:
-                    logger.error(f"停止监控服务出错: {str(e)}")
-            self._observer = []
+        if not self._running:
+            return
+            
+        logger.info(f"{self.plugin_name} 停止监控服务...")
         self._running = False
+        
+        # 停止所有观察者
+        for observer in self._observer:
+            try:
+                observer.stop()
+                observer.join(timeout=5)
+            except Exception as e:
+                logger.error(f"停止监控服务时出错: {str(e)}")
+        
+        self._observer = []
+        logger.info(f"{self.plugin_name} 插件服务已停止")

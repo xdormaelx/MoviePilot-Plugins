@@ -6,6 +6,9 @@ import re
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, field
 
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+
 from app.plugins import _PluginBase
 from app.schemas.types import EventType, SystemConfigKey, NotificationType
 from app.core.config import settings
@@ -18,7 +21,7 @@ class PluginConfigModel:
     """插件配置模型"""
     enabled: bool = False  # 启用插件开关
     notify: bool = False   # 发送通知开关
-    onlyonce: bool = False # 立即运行开关
+    onlyonce: bool = False # 立即运行一次开关
     monitor_dirs: str = ""  # 监控目录路径（多行）
     video_exts: str = "mp4,mkv,avi,ts"  # 视频文件扩展名
     sub_exts: str = "ass,ssa,srt"  # 字幕文件扩展名
@@ -26,12 +29,12 @@ class PluginConfigModel:
 class SubtitleRenamer:
     """字幕文件重命名工具"""
     
-    def rename_subtitle(self, sub_path: str, monitor_dir: str, video_exts: List[str]) -> Tuple[bool, str]:
+    def rename_subtitle(self, sub_path: str, video_dir: str, video_exts: List[str]) -> Tuple[bool, str]:
         """
         重命名字幕文件
         
         :param sub_path: 字幕文件路径
-        :param monitor_dir: 监控目录
+        :param video_dir: 视频文件所在目录
         :param video_exts: 视频文件扩展名列表
         :return: (是否成功, 消息)
         """
@@ -46,8 +49,8 @@ class SubtitleRenamer:
             logger.info(msg)
             return False, msg
             
-        # 查找匹配的视频文件
-        video_file = self.find_matching_video(monitor_dir, video_exts, sub_episode)
+        # 在当前目录查找匹配的视频文件
+        video_file = self.find_matching_video(video_dir, video_exts, sub_episode)
         if not video_file:
             msg = f"未找到匹配的视频文件，字幕: {sub_episode}"
             logger.info(msg)
@@ -60,8 +63,8 @@ class SubtitleRenamer:
             logger.warning(msg)
             return False, msg
         
-        # 重命名字幕文件
-        new_sub_path = os.path.join(monitor_dir, new_sub_name)
+        # 重命名字幕文件（保持在同一目录）
+        new_sub_path = os.path.join(video_dir, new_sub_name)
         if os.path.exists(new_sub_path):
             msg = f"目标字幕文件已存在: {new_sub_name}"
             logger.warning(msg)
@@ -131,6 +134,21 @@ class SubtitleRenamer:
         # 生成新的字幕文件名
         return f"{video_base}{sub_ext}"
 
+class SubtitleMonitorHandler(FileSystemEventHandler):
+    """字幕文件监控处理器"""
+    
+    def __init__(self, plugin: Any):
+        super().__init__()
+        self.plugin = plugin
+    
+    def on_created(self, event):
+        if not event.is_directory:
+            self.plugin.process_subtitle(event.src_path)
+    
+    def on_moved(self, event):
+        if not event.is_directory:
+            self.plugin.process_subtitle(event.dest_path)
+
 class AutoSubRename(_PluginBase):
     # 插件名称
     plugin_name = "字幕自动重命名"
@@ -139,7 +157,7 @@ class AutoSubRename(_PluginBase):
     # 插件图标
     plugin_icon = "rename.png"
     # 插件版本
-    plugin_version = "1.0.0"
+    plugin_version = "1.1.0"
     # 插件作者
     plugin_author = "xdormaelx"
     # 作者主页
@@ -158,8 +176,8 @@ class AutoSubRename(_PluginBase):
         self._current_config = self._get_config()
         # 监控目录列表
         self._monitor_dirs = []
-        # 文件监控线程
-        self._thread = None
+        # 文件监控观察者列表
+        self._observer = []
         # 运行标志
         self._running = False
         # 重命名器实例
@@ -236,10 +254,58 @@ class AutoSubRename(_PluginBase):
             
         logger.info(f"{self.plugin_name} 启动监控服务...")
         self._running = True
-        self._thread = threading.Thread(target=self.__monitor_files)
-        self._thread.daemon = True
-        self._thread.start()
-        logger.info(f"{self.plugin_name} 插件已启动，监控目录: {self._monitor_dirs}")
+        
+        # 添加监控目录（包括所有子目录）
+        for monitor_dir in self._monitor_dirs:
+            if not os.path.exists(monitor_dir):
+                logger.warning(f"监控目录不存在: {monitor_dir}")
+                continue
+                
+            observer = Observer()
+            handler = SubtitleMonitorHandler(self)
+            observer.schedule(handler, path=monitor_dir, recursive=True)  # 递归监控子目录
+            observer.start()
+            self._observer.append(observer)
+            logger.info(f"开始监控目录: {monitor_dir}")
+    
+    def process_subtitle(self, sub_path: str):
+        """处理字幕文件"""
+        # 检查是否已处理过
+        if sub_path in self._processed_files:
+            return
+            
+        # 获取字幕文件所在目录
+        sub_dir = os.path.dirname(sub_path)
+        
+        # 检查是否在监控目录下
+        if not any(sub_dir.startswith(mon_dir) for mon_dir in self._monitor_dirs):
+            return
+            
+        # 获取文件扩展名
+        ext = os.path.splitext(sub_path)[-1].lstrip(".").lower()
+        sub_exts = [e.strip().lower() for e in self._current_config.sub_exts.split(",")]
+        
+        # 检查是否是字幕文件
+        if ext not in sub_exts:
+            return
+            
+        # 重命名字幕文件
+        video_exts = [e.strip().lower() for e in self._current_config.video_exts.split(",")]
+        success, msg = self._renamer.rename_subtitle(
+            sub_path=sub_path,
+            video_dir=sub_dir,  # 在字幕文件所在目录查找视频
+            video_exts=video_exts
+        )
+        
+        # 处理结果
+        if success:
+            self._processed_files.add(sub_path)
+            if self._current_config.notify:
+                self.post_message(
+                    mtype=NotificationType.Plugin,
+                    title=f"【{self.plugin_name}】字幕重命名",
+                    text=msg
+                )
     
     def batch_rename(self):
         """批量重命名所有监控目录中的字幕文件"""
@@ -248,8 +314,8 @@ class AutoSubRename(_PluginBase):
             return
             
         logger.info("开始批量重命名字幕文件...")
-        video_extensions = [ext.strip().lower() for ext in self._current_config.video_exts.split(",")]
-        sub_extensions = [ext.strip().lower() for ext in self._current_config.sub_exts.split(",")]
+        video_exts = [ext.strip().lower() for ext in self._current_config.video_exts.split(",")]
+        sub_exts = [ext.strip().lower() for ext in self._current_config.sub_exts.split(",")]
         
         results = []
         for monitor_dir in self._monitor_dirs:
@@ -257,27 +323,24 @@ class AutoSubRename(_PluginBase):
                 logger.warning(f"监控目录不存在: {monitor_dir}")
                 continue
                 
-            for filename in os.listdir(monitor_dir):
-                file_path = os.path.join(monitor_dir, filename)
-                
-                # 跳过目录
-                if os.path.isdir(file_path):
-                    continue
-                
-                # 获取文件扩展名
-                _, file_ext = os.path.splitext(filename)
-                ext = file_ext.lstrip(".").lower()
-                
-                # 处理字幕文件
-                if ext in sub_extensions:
-                    success, msg = self._renamer.rename_subtitle(
-                        sub_path=file_path,
-                        monitor_dir=monitor_dir,
-                        video_exts=video_extensions
-                    )
-                    results.append(msg)
-                    if success:
-                        self._processed_files.add(file_path)
+            # 递归遍历所有子目录
+            for root, _, files in os.walk(monitor_dir):
+                for filename in files:
+                    file_path = os.path.join(root, filename)
+                    
+                    # 获取文件扩展名
+                    ext = os.path.splitext(filename)[-1].lstrip(".").lower()
+                    
+                    # 处理字幕文件
+                    if ext in sub_exts:
+                        success, msg = self._renamer.rename_subtitle(
+                            sub_path=file_path,
+                            video_dir=root,  # 在当前目录查找视频
+                            video_exts=video_exts
+                        )
+                        results.append(msg)
+                        if success:
+                            self._processed_files.add(file_path)
         
         # 发送通知
         if self._current_config.notify and results:
@@ -390,7 +453,7 @@ class AutoSubRename(_PluginBase):
                                             "model": "monitor_dirs",
                                             "label": "监控目录",
                                             "rows": 3,
-                                            "placeholder": "每行一个目录路径"
+                                            "placeholder": "每行一个目录路径（支持子目录监控）"
                                         }
                                     }
                                 ]
@@ -429,6 +492,44 @@ class AutoSubRename(_PluginBase):
                                 ]
                             }
                         ]
+                    },
+                    {
+                        "component": "VRow",
+                        "content": [
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12},
+                                "content": [
+                                    {
+                                        "component": "VAlert",
+                                        "props": {
+                                            "type": "info",
+                                            "variant": "tonal",
+                                            "text": "启用插件后，会自动监控目录及其所有子目录中的字幕文件，并与同目录下的视频文件进行匹配重命名。"
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "component": "VRow",
+                        "content": [
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12},
+                                "content": [
+                                    {
+                                        "component": "VAlert",
+                                        "props": {
+                                            "type": "info",
+                                            "variant": "tonal",
+                                            "text": "点击'立即运行一次'会对所有监控目录及其子目录执行一次批量重命名操作，完成后自动关闭该选项。"
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
                     }
                 ]
             }
@@ -454,71 +555,14 @@ class AutoSubRename(_PluginBase):
             
         logger.info(f"{self.plugin_name} 停止监控服务...")
         self._running = False
-        if self._thread and self._thread.is_alive():
-            self._thread.join(timeout=5)
-        self._thread = None
-        logger.info(f"{self.plugin_name} 插件服务已停止")
-    
-    def __monitor_files(self):
-        """
-        文件监控线程函数
-        """
-        video_extensions = [ext.strip().lower() for ext in self._current_config.video_exts.split(",")]
-        sub_extensions = [ext.strip().lower() for ext in self._current_config.sub_exts.split(",")]
         
-        logger.info(f"{self.plugin_name} 开始监控目录: {self._monitor_dirs}")
-        
-        while self._running:
+        # 停止所有观察者
+        for observer in self._observer:
             try:
-                # 遍历所有监控目录
-                for monitor_dir in self._monitor_dirs:
-                    if not os.path.exists(monitor_dir):
-                        continue
-                        
-                    # 扫描目录中的所有文件
-                    for filename in os.listdir(monitor_dir):
-                        if not self._running:
-                            return
-                            
-                        file_path = os.path.join(monitor_dir, filename)
-                        
-                        # 跳过目录
-                        if os.path.isdir(file_path):
-                            continue
-                        
-                        # 检查文件是否已处理过
-                        if file_path in self._processed_files:
-                            continue
-                        
-                        # 获取文件扩展名
-                        _, file_ext = os.path.splitext(filename)
-                        ext = file_ext.lstrip(".").lower()
-                        
-                        # 处理字幕文件
-                        if ext in sub_extensions:
-                            logger.info(f"发现新的字幕文件: {filename}")
-                            success, msg = self._renamer.rename_subtitle(
-                                sub_path=file_path,
-                                monitor_dir=monitor_dir,
-                                video_exts=video_extensions
-                            )
-                            
-                            # 发送通知
-                            if success and self._current_config.notify:
-                                self.post_message(
-                                    mtype=NotificationType.Plugin,
-                                    title=f"【{self.plugin_name}】字幕重命名",
-                                    text=msg
-                                )
-                            
-                            self._processed_files.add(file_path)
-                
-                # 每30秒扫描一次
-                for _ in range(30):
-                    if not self._running:
-                        return
-                    time.sleep(1)
-                
+                observer.stop()
+                observer.join(timeout=5)
             except Exception as e:
-                logger.error(f"{self.plugin_name} 监控线程发生错误: {str(e)}")
-                time.sleep(60)
+                logger.error(f"停止监控服务时出错: {str(e)}")
+        
+        self._observer = []
+        logger.info(f"{self.plugin_name} 插件服务已停止")

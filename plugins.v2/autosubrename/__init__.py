@@ -384,11 +384,30 @@ class AutoSubRename(_PluginBase):
             self.stop_service()
             self.init_plugin()
 
+    @eventmanager.register(EventType.PluginAction)
+    def handle_command(self, event: Event):
+        """
+        响应远程命令
+        """
+        if not event.event_data or event.event_data.get("action") != "batch_rename":
+            return
+        # 执行批量重命名
+        self.batch_rename()
+        # 发送响应消息
+        if event.event_data.get("channel") and event.event_data.get("user"):
+            self.post_message(
+                channel=event.event_data.get("channel"),
+                userid=event.event_data.get("user"),
+                title="【字幕重命名】操作结果",
+                text="批量重命名已执行完成"
+            )
+
     def get_command(self) -> List[Dict[str, Any]]:
         return [{
             "cmd": "/subrename",
             "event": EventType.PluginAction,
             "desc": "字幕重命名",
+            "category": "",
             "data": {"action": "batch_rename"}
         }]
 
@@ -513,77 +532,26 @@ class AutoSubRename(_PluginBase):
                                 ]
                             }
                         ]
-                    },
-                    {
-                        "component": "VRow",
-                        "content": [
-                            {
-                                "component": "VCol",
-                                "props": {"cols": 12},
-                                "content": [
-                                    {
-                                        "component": "VAlert",
-                                        "props": {
-                                            "type": "info",
-                                            "variant": "tonal",
-                                            "text": "启用插件后，会自动监控目录及其所有子目录中的字幕文件，并与同目录下的视频文件进行匹配重命名。"
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        "component": "VRow",
-                        "content": [
-                            {
-                                "component": "VCol",
-                                "props": {"cols": 12},
-                                "content": [
-                                    {
-                                        "component": "VAlert",
-                                        "props": {
-                                            "type": "info",
-                                            "variant": "tonal",
-                                            "text": "点击'立即运行一次'会启动后台任务处理所有字幕文件，完成后自动关闭该选项。"
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
                     }
                 ]
             }
         ], {
-            "enabled": self._current_config.enabled,
-            "notify": self._current_config.notify,
-            "onlyonce": self._current_config.onlyonce,
-            "monitor_dirs": self._current_config.monitor_dirs,
-            "video_exts": self._current_config.video_exts,
-            "sub_exts": self._current_config.sub_exts
+            "enabled": False,
+            "notify": False,
+            "onlyonce": False,
+            "monitor_dirs": "",
+            "video_exts": "mp4,mkv,avi,ts",
+            "sub_exts": "ass,ssa,srt"
         }
-
-    def get_page(self) -> List[Dict]:
-        pass
-
-    def get_state(self) -> bool:
-        return self._current_config.enabled
 
     def stop_service(self):
         """停止监控服务"""
-        if not self._running:
-            return
-            
-        logger.info(f"{self.plugin_name} 停止监控服务...")
+        if self._observer:
+            for observer in self._observer:
+                try:
+                    observer.stop()
+                    observer.join()
+                except Exception as e:
+                    logger.error(f"停止监控服务出错: {str(e)}")
+            self._observer = []
         self._running = False
-        
-        # 停止所有观察者
-        for observer in self._observer:
-            try:
-                observer.stop()
-                observer.join(timeout=5)
-            except Exception as e:
-                logger.error(f"停止监控服务时出错: {str(e)}")
-        
-        self._observer = []
-        logger.info(f"{self.plugin_name} 插件服务已停止")

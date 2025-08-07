@@ -157,7 +157,7 @@ class AutoSubRename(_PluginBase):
     # 插件图标
     plugin_icon = "rename.png"
     # 插件版本
-    plugin_version = "1.0.2"
+    plugin_version = "1.0.1"
     # 插件作者
     plugin_author = "xdormaelx"
     # 作者主页
@@ -245,7 +245,6 @@ class AutoSubRename(_PluginBase):
             # 重置立即运行标志
             self._current_config.onlyonce = False
             self.__update_config()
-            logger.info("重置立即运行标志")
     
     def __update_config(self):
         """更新配置到数据库"""
@@ -313,7 +312,6 @@ class AutoSubRename(_PluginBase):
             # 处理结果
             if success:
                 self._processed_files.add(sub_path)
-                # 检查通知开关是否开启
                 if self._current_config.notify:
                     self.post_message(
                         mtype=NotificationType.Plugin,
@@ -362,7 +360,7 @@ class AutoSubRename(_PluginBase):
                             logger.error(f"处理字幕文件 {file_path} 时出错: {str(e)}")
                             results.append(f"处理字幕文件 {file_path} 时出错: {str(e)}")
         
-        # 发送通知 (仅在通知开关开启时发送)
+        # 发送通知
         if self._current_config.notify and results:
             success_count = sum("成功" in r for r in results)
             fail_count = len(results) - success_count

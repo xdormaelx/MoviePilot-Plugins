@@ -25,19 +25,17 @@ class PluginConfigModel:
     monitor_dirs: str = ""  # 监控目录路径（多行）
     video_exts: str = "mp4,mkv,avi,ts"  # 视频文件扩展名
     sub_exts: str = "ass,ssa,srt"  # 字幕文件扩展名
-    rename_pattern: str = "{video_name}{sub_ext}"  # 重命名模式
 
 class SubtitleRenamer:
     """字幕文件重命名工具"""
     
-    def rename_subtitle(self, sub_path: str, video_dir: str, video_exts: List[str], rename_pattern: str) -> Tuple[bool, str]:
+    def rename_subtitle(self, sub_path: str, video_dir: str, video_exts: List[str]) -> Tuple[bool, str]:
         """
         重命名字幕文件
         
         :param sub_path: 字幕文件路径
         :param video_dir: 视频文件所在目录
         :param video_exts: 视频文件扩展名列表
-        :param rename_pattern: 重命名模式
         :return: (是否成功, 消息)
         """
         # 获取字幕文件名和扩展名
@@ -57,16 +55,13 @@ class SubtitleRenamer:
             msg = f"未找到匹配的视频文件，字幕: {sub_episode}"
             logger.info(msg)
             return False, msg
-        
-        # 获取视频文件名（不含扩展名）
-        video_base = os.path.splitext(video_file)[0]
-        
+            
         # 生成新的字幕文件名
-        new_sub_name = self.generate_new_sub_name(
-            video_name=video_base,
-            sub_ext=sub_ext,
-            pattern=rename_pattern
-        )
+        new_sub_name = self.generate_new_sub_name(video_file, sub_ext)
+        if not new_sub_name:
+            msg = f"无法生成新的字幕文件名"
+            logger.warning(msg)
+            return False, msg
         
         # 重命名字幕文件（保持在同一目录）
         new_sub_path = os.path.join(video_dir, new_sub_name)
@@ -125,24 +120,19 @@ class SubtitleRenamer:
                 return filename
         return None
     
-    def generate_new_sub_name(self, video_name: str, sub_ext: str, pattern: str) -> str:
+    def generate_new_sub_name(self, video_file: str, sub_ext: str) -> Optional[str]:
         """
         生成新的字幕文件名
         
-        :param video_name: 视频文件名（不含扩展名）
+        :param video_file: 视频文件名
         :param sub_ext: 字幕文件扩展名
-        :param pattern: 重命名模式
         :return: 新的字幕文件名
         """
-        # 默认模式：直接使用视频文件名
-        if not pattern:
-            pattern = "{video_name}{sub_ext}"
+        # 获取视频文件的主文件名（不含扩展名）
+        video_base = os.path.splitext(video_file)[0]
         
-        # 替换模式中的变量
-        return pattern.format(
-            video_name=video_name,
-            sub_ext=sub_ext
-        )
+        # 生成新的字幕文件名
+        return f"{video_base}{sub_ext}"
 
 class SubtitleMonitorHandler(FileSystemEventHandler):
     """字幕文件监控处理器"""
@@ -163,7 +153,7 @@ class AutoSubRename(_PluginBase):
     # 插件名称
     plugin_name = "剧集字幕重命名"
     # 插件描述
-    plugin_desc = "自动重命名匹配的字幕文件，使其与视频文件名称保持一致"
+    plugin_desc = "自动重命名匹配的字幕文件"
     # 插件图标
     plugin_icon = "rename.png"
     # 插件版本
@@ -212,8 +202,7 @@ class AutoSubRename(_PluginBase):
             onlyonce=config_data.get("onlyonce", False),
             monitor_dirs=config_data.get("monitor_dirs", ""),
             video_exts=config_data.get("video_exts", "mp4,mkv,avi,ts"),
-            sub_exts=config_data.get("sub_exts", "ass,ssa,srt"),
-            rename_pattern=config_data.get("rename_pattern", "{video_name}{sub_ext}")
+            sub_exts=config_data.get("sub_exts", "ass,ssa,srt")
         )
     
     def init_plugin(self, config: Dict = None):
@@ -225,8 +214,7 @@ class AutoSubRename(_PluginBase):
                 onlyonce=config.get("onlyonce", False),
                 monitor_dirs=config.get("monitor_dirs", ""),
                 video_exts=config.get("video_exts", "mp4,mkv,avi,ts"),
-                sub_exts=config.get("sub_exts", "ass,ssa,srt"),
-                rename_pattern=config.get("rename_pattern", "{video_name}{sub_ext}")
+                sub_exts=config.get("sub_exts", "ass,ssa,srt")
             )
             # 保存新配置
             self.__update_config()
@@ -266,8 +254,7 @@ class AutoSubRename(_PluginBase):
             "onlyonce": self._current_config.onlyonce,
             "monitor_dirs": self._current_config.monitor_dirs,
             "video_exts": self._current_config.video_exts,
-            "sub_exts": self._current_config.sub_exts,
-            "rename_pattern": self._current_config.rename_pattern
+            "sub_exts": self._current_config.sub_exts
         }
         SystemConfigOper().set(self._config_key, config_data)
     
@@ -318,9 +305,8 @@ class AutoSubRename(_PluginBase):
             video_exts = [e.strip().lower() for e in self._current_config.video_exts.split(",")]
             success, msg = self._renamer.rename_subtitle(
                 sub_path=sub_path,
-                video_dir=sub_dir,
-                video_exts=video_exts,
-                rename_pattern=self._current_config.rename_pattern
+                video_dir=sub_dir,  # 在字幕文件所在目录查找视频
+                video_exts=video_exts
             )
             
             # 处理结果
@@ -364,9 +350,8 @@ class AutoSubRename(_PluginBase):
                         try:
                             success, msg = self._renamer.rename_subtitle(
                                 sub_path=file_path,
-                                video_dir=root,
-                                video_exts=video_exts,
-                                rename_pattern=self._current_config.rename_pattern
+                                video_dir=root,  # 在当前目录查找视频
+                                video_exts=video_exts
                             )
                             results.append(msg)
                             if success:
@@ -389,7 +374,7 @@ class AutoSubRename(_PluginBase):
         logger.info("批量重命名完成")
     
     @eventmanager.register(EventType.PluginReload)
-    def reload(self, event: Event):
+    def reload(self, event: Event, chain=None):
         """
         插件重载事件
         """
@@ -537,47 +522,6 @@ class AutoSubRename(_PluginBase):
                                 "props": {"cols": 12},
                                 "content": [
                                     {
-                                        "component": "VTextField",
-                                        "props": {
-                                            "model": "rename_pattern",
-                                            "label": "重命名模式",
-                                            "placeholder": "{video_name}{sub_ext}"
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        "component": "VRow",
-                        "content": [
-                            {
-                                "component": "VCol",
-                                "props": {"cols": 12},
-                                "content": [
-                                    {
-                                        "component": "VAlert",
-                                        "props": {
-                                            "type": "info",
-                                            "variant": "tonal",
-                                            "text": "重命名模式变量说明：\n"
-                                                    "{video_name} - 视频文件名（不含扩展名）\n"
-                                                    "{sub_ext} - 字幕文件扩展名\n"
-                                                    "示例：{video_name}.chinese{sub_ext}"
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        "component": "VRow",
-                        "content": [
-                            {
-                                "component": "VCol",
-                                "props": {"cols": 12},
-                                "content": [
-                                    {
                                         "component": "VAlert",
                                         "props": {
                                             "type": "info",
@@ -616,8 +560,7 @@ class AutoSubRename(_PluginBase):
             "onlyonce": self._current_config.onlyonce,
             "monitor_dirs": self._current_config.monitor_dirs,
             "video_exts": self._current_config.video_exts,
-            "sub_exts": self._current_config.sub_exts,
-            "rename_pattern": self._current_config.rename_pattern
+            "sub_exts": self._current_config.sub_exts
         }
 
     def get_page(self) -> List[Dict]:

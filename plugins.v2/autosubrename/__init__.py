@@ -245,6 +245,8 @@ class AutoSubRename(_PluginBase):
             }
         ], self._current_config.__dict__
 
+    def get_page(self) -> List[Dict]:
+        pass
     def get_state(self) -> bool:
         return self._current_config.enabled
 

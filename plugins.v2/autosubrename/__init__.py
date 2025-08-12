@@ -16,6 +16,10 @@ from app.core.event import eventmanager, Event
 from app.db.systemconfig_oper import SystemConfigOper
 from app.log import logger
 
+# V2 服务封装引入
+from app.helper.service import ServiceConfigHelper
+from app.helper.notification import NotificationHelper
+
 @dataclass
 class PluginConfigModel:
     """插件配置模型"""
@@ -157,7 +161,7 @@ class AutoSubRename(_PluginBase):
     # 插件图标
     plugin_icon = "rename.png"
     # 插件版本
-    plugin_version = "1.0.1"
+    plugin_version = "1.0.2"  # 更新版本号
     # 插件作者
     plugin_author = "xdormaelx"
     # 作者主页
@@ -166,12 +170,14 @@ class AutoSubRename(_PluginBase):
     plugin_order = 1
     # 可重用
     reusable = True
+    # V2 版本兼容标识
+    v2 = True
     
     def __init__(self):
         # 配置模型
         self._config_model = PluginConfigModel
-        # 配置键
-        self._config_key = f"{self.plugin_name}:config"
+        # 配置键（使用V2专用配置键）
+        self._config_key = SystemConfigKey.AutoSubRenameConfig
         # 当前配置
         self._current_config = self._get_config()
         # 监控目录列表
@@ -186,24 +192,19 @@ class AutoSubRename(_PluginBase):
         self._processed_files = set()
         # 批量处理线程
         self._batch_thread = None
+        # V2 通知服务
+        self._notification = NotificationHelper()
     
     def _get_config(self) -> PluginConfigModel:
         """获取插件配置"""
-        # 从系统配置中获取插件配置
-        config_data = SystemConfigOper().get(self._config_key)
+        # 使用 ServiceConfigHelper 获取配置
+        config_data = ServiceConfigHelper.get_configs(self._config_key, PluginConfigModel)
         
         if not config_data:
             return self._config_model()
-        
-        # 将配置数据转换为配置模型
-        return PluginConfigModel(
-            enabled=config_data.get("enabled", False),
-            notify=config_data.get("notify", False),
-            onlyonce=config_data.get("onlyonce", False),
-            monitor_dirs=config_data.get("monitor_dirs", ""),
-            video_exts=config_data.get("video_exts", "mp4,mkv,avi,ts"),
-            sub_exts=config_data.get("sub_exts", "ass,ssa,srt")
-        )
+            
+        # 返回第一个配置（单插件配置）
+        return config_data[0] if config_data else self._config_model()
     
     def init_plugin(self, config: Dict = None):
         # 如果有新的配置传入，更新当前配置
@@ -248,15 +249,11 @@ class AutoSubRename(_PluginBase):
     
     def __update_config(self):
         """更新配置到数据库"""
-        config_data = {
-            "enabled": self._current_config.enabled,
-            "notify": self._current_config.notify,
-            "onlyonce": self._current_config.onlyonce,
-            "monitor_dirs": self._current_config.monitor_dirs,
-            "video_exts": self._current_config.video_exts,
-            "sub_exts": self._current_config.sub_exts
-        }
-        SystemConfigOper().set(self._config_key, config_data)
+        # 使用 ServiceConfigHelper 保存配置
+        ServiceConfigHelper.set(
+            self._config_key,
+            [self._current_config]  # 包装为列表
+        )
     
     def start_service(self):
         """启动监控服务"""
@@ -313,7 +310,8 @@ class AutoSubRename(_PluginBase):
             if success:
                 self._processed_files.add(sub_path)
                 if self._current_config.notify:
-                    self.post_message(
+                    # 使用 V2 通知服务
+                    self._notification.send(
                         mtype=NotificationType.Plugin,
                         title=f"【{self.plugin_name}】字幕重命名",
                         text=msg
@@ -365,7 +363,9 @@ class AutoSubRename(_PluginBase):
             success_count = sum("成功" in r for r in results)
             fail_count = len(results) - success_count
             summary = f"批量重命名完成: 成功 {success_count} 个, 失败 {fail_count} 个"
-            self.post_message(
+            
+            # 使用 V2 通知服务
+            self._notification.send(
                 mtype=NotificationType.Plugin,
                 title=f"【{self.plugin_name}】批量重命名结果",
                 text=f"{summary}\n\n详细结果:\n" + "\n".join(results)

@@ -6,6 +6,7 @@ import re
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, field
 
+from app import schemas
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
@@ -136,18 +137,19 @@ class SubtitleRenamer:
 
 class SubtitleMonitorHandler(FileSystemEventHandler):
     """字幕文件监控处理器"""
-    
+
     def __init__(self, plugin: Any):
         super().__init__()
         self.plugin = plugin
-    
+
     def on_created(self, event):
         if not event.is_directory:
             self.plugin.process_subtitle(event.src_path)
-    
+
     def on_moved(self, event):
         if not event.is_directory:
             self.plugin.process_subtitle(event.dest_path)
+
 
 class AutoSubRename(_PluginBase):
     # 插件名称
@@ -279,27 +281,37 @@ class AutoSubRename(_PluginBase):
             self._observer.append(observer)
             logger.info(f"开始监控目录: {monitor_dir}")
     
+    @staticmethod
+    def _is_under_directory(path: str, directory: str) -> bool:
+        """判断 path 是否位于 directory 内（包含 directory 本身）。"""
+        try:
+            path = os.path.abspath(os.path.realpath(path))
+            directory = os.path.abspath(os.path.realpath(directory))
+            return os.path.commonpath([path, directory]) == directory
+        except (OSError, ValueError):
+            return False
+
     def process_subtitle(self, sub_path: str):
         """处理字幕文件"""
         # 检查是否已处理过
         if sub_path in self._processed_files:
             return
-            
+
         # 获取字幕文件所在目录
         sub_dir = os.path.dirname(sub_path)
-        
-        # 检查是否在监控目录下
-        if not any(sub_dir.startswith(mon_dir) for mon_dir in self._monitor_dirs):
+
+        # 检查是否在监控目录下，使用 commonpath 避免 /media/tv2 被误判为 /media/tv 的子目录
+        if not any(self._is_under_directory(sub_dir, monitor_dir) for monitor_dir in self._monitor_dirs):
             return
-            
+
         # 获取文件扩展名
         ext = os.path.splitext(sub_path)[-1].lstrip(".").lower()
         sub_exts = [e.strip().lower() for e in self._current_config.sub_exts.split(",")]
-        
+
         # 检查是否是字幕文件
         if ext not in sub_exts:
             return
-            
+
         try:
             # 重命名字幕文件
             video_exts = [e.strip().lower() for e in self._current_config.video_exts.split(",")]
@@ -308,7 +320,7 @@ class AutoSubRename(_PluginBase):
                 video_dir=sub_dir,  # 在字幕文件所在目录查找视频
                 video_exts=video_exts
             )
-            
+
             # 处理结果
             if success:
                 self._processed_files.add(sub_path)
@@ -320,7 +332,7 @@ class AutoSubRename(_PluginBase):
                     )
         except Exception as e:
             logger.error(f"处理字幕文件时出错: {str(e)}")
-    
+
     def batch_rename(self):
         """批量重命名所有监控目录中的字幕文件"""
         if not self._monitor_dirs:
@@ -378,11 +390,23 @@ class AutoSubRename(_PluginBase):
         """
         插件重载事件
         """
-        # 检查事件是否针对本插件
-        if event.event_data and event.event_data.get("plugin_id") == self.plugin_name:
+        if not event:
+            return
+        event_data = event.event_data or {}
+        if event_data.get("plugin_id") == self.plugin_name:
             logger.info(f"{self.plugin_name} 插件配置已重载")
             self.stop_service()
             self.init_plugin()
+
+    @eventmanager.register(EventType.PluginAction)
+    def remote_batch_rename(self, event: Event):
+        """响应远程命令，异步执行批量重命名。"""
+        event_data = event.event_data if event else {}
+        if not event_data or event_data.get("action") != "batch_rename":
+            return
+
+        self._batch_thread = threading.Thread(target=self.batch_rename, daemon=True)
+        self._batch_thread.start()
 
     def get_command(self) -> List[Dict[str, Any]]:
         return [{
@@ -396,18 +420,20 @@ class AutoSubRename(_PluginBase):
         return [{
             "path": "/batch_rename",
             "endpoint": self.batch_rename_api,
-            "methods": ["GET"],
+            "methods": ["POST"],
             "summary": "批量重命名字幕",
             "description": "立即执行一次批量重命名操作",
         }]
-    
-    def batch_rename_api(self) -> dict:
-        """API批量重命名"""
-        # 启动线程执行批量重命名
-        self._batch_thread = threading.Thread(target=self.batch_rename)
-        self._batch_thread.daemon = True
+
+    def batch_rename_api(self, apikey: str = "") -> schemas.Response:
+        """校验 API 密钥后异步启动批量重命名。"""
+        api_token = getattr(settings, "API_TOKEN", "")
+        if not api_token or apikey != api_token:
+            return schemas.Response(success=False, message="API密钥错误")
+
+        self._batch_thread = threading.Thread(target=self.batch_rename, daemon=True)
         self._batch_thread.start()
-        return {"code": 0, "msg": "批量重命名操作已启动"}
+        return schemas.Response(success=True, message="批量重命名操作已启动")
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         """
@@ -564,7 +590,7 @@ class AutoSubRename(_PluginBase):
         }
 
     def get_page(self) -> List[Dict]:
-        pass
+        return []
 
     def get_state(self) -> bool:
         return self._current_config.enabled

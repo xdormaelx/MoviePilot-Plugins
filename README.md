@@ -16,7 +16,7 @@ MoviePilot官方插件市场：https://github.com/jxxghp/MoviePilot-Plugins
 - 支持自定义视频和字幕文件扩展名；
 - 可选发送处理结果通知；
 - 支持通过远程命令 `/subrename` 触发批量处理；
-- 支持通过插件 API `GET /batch_rename` 异步触发批量处理。
+- 支持通过插件 API `POST /batch_rename` 异步触发批量处理（需要提供 MoviePilot API 密钥）；
 
 **默认扩展名：**
 

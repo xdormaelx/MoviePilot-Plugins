@@ -140,6 +140,40 @@ class AutoSubRenameTests(unittest.TestCase):
     def setUpClass(cls):
         cls.module = load_plugin_module()
 
+    def test_clear_processed_files_requires_token_and_clears_cache(self):
+        plugin = self.module.AutoSubRename.__new__(self.module.AutoSubRename)
+        plugin._processed_files = {"/media/a.ass", "/media/b.sup"}
+        denied = plugin.clear_processed_files(apikey="wrong-token")
+        self.assertFalse(denied.success)
+        self.assertEqual(len(plugin._processed_files), 2)
+        accepted = plugin.clear_processed_files(apikey="test-token")
+        self.assertTrue(accepted.success)
+        self.assertEqual(plugin._processed_files, set())
+
+    def test_detail_page_contains_clear_cache_action(self):
+        plugin = self.module.AutoSubRename.__new__(self.module.AutoSubRename)
+        page = plugin.get_page()
+        page_text = repr(page)
+        self.assertIn("清除重命名记录缓存", page_text)
+        self.assertIn("clear_processed_files", page_text)
+
+    def test_movie_subtitle_uses_only_video_in_directory(self):
+        renamer = self.module.SubtitleRenamer()
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            video = directory / "My Movie 2024.mkv"
+            subtitle = directory / "incoming.sup"
+            video.touch()
+            subtitle.touch()
+            success, _ = renamer.rename_subtitle(
+                str(subtitle), str(directory), ["mkv"]
+            )
+            self.assertTrue(success)
+            self.assertTrue((directory / "My Movie 2024.sup").exists())
+
+    def test_default_subtitle_extensions_include_sup(self):
+        self.assertIn("sup", self.module.PluginConfigModel().sub_exts)
+
     def test_plugin_initializes_moviepilot_base(self):
         plugin = self.module.AutoSubRename()
         self.assertTrue(hasattr(plugin, "chain"))

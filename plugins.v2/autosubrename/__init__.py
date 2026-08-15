@@ -25,7 +25,7 @@ class PluginConfigModel:
     onlyonce: bool = False # 立即运行一次开关
     monitor_dirs: str = ""  # 监控目录路径（多行）
     video_exts: str = "mp4,mkv,avi,ts"  # 视频文件扩展名
-    sub_exts: str = "ass,ssa,srt"  # 字幕文件扩展名
+    sub_exts: str = "ass,ssa,srt,sup"  # 字幕文件扩展名
 
 class SubtitleRenamer:
     """字幕文件重命名工具"""
@@ -43,17 +43,15 @@ class SubtitleRenamer:
         sub_name = os.path.basename(sub_path)
         sub_base, sub_ext = os.path.splitext(sub_name)
         
-        # 提取字幕文件中的季集信息
+        # 提取字幕文件中的季集信息；没有季集信息时按电影字幕逻辑处理
         sub_episode = self.extract_episode_info(sub_base)
-        if not sub_episode:
-            msg = f"字幕文件 {sub_name} 中未找到季集信息"
-            logger.info(msg)
-            return False, msg
-            
-        # 在当前目录查找匹配的视频文件
-        video_file = self.find_matching_video(video_dir, video_exts, sub_episode)
+        # 优先按季集匹配剧集；没有季集信息时按电影目录规则匹配
+        if sub_episode:
+            video_file = self.find_matching_video(video_dir, video_exts, sub_episode)
+        else:
+            video_file = self.find_matching_movie(video_dir, video_exts, sub_base)
         if not video_file:
-            msg = f"未找到匹配的视频文件，字幕: {sub_episode}"
+            msg = f"未找到匹配的视频文件，字幕: {sub_episode or sub_name}"
             logger.info(msg)
             return False, msg
             
@@ -121,6 +119,27 @@ class SubtitleRenamer:
                 return filename
         return None
     
+    def find_matching_movie(self, directory: str, video_exts: List[str], subtitle_base: str) -> Optional[str]:
+        """按电影目录规则查找视频：优先名称相关，否则仅接受唯一视频文件。"""
+        candidates = []
+        subtitle_base = subtitle_base.lower()
+        for filename in os.listdir(directory):
+            ext = os.path.splitext(filename)[-1].lstrip(".").lower()
+            if ext not in video_exts:
+                continue
+            candidates.append(filename)
+
+        if len(candidates) == 1:
+            return candidates[0]
+
+        # 多个视频时仅在字幕名和视频名存在明确包含关系时匹配，避免误改名
+        related = [
+            filename for filename in candidates
+            if os.path.splitext(filename)[0].lower() in subtitle_base
+            or subtitle_base in os.path.splitext(filename)[0].lower()
+        ]
+        return related[0] if len(related) == 1 else None
+
     def generate_new_sub_name(self, video_file: str, sub_ext: str) -> Optional[str]:
         """
         生成新的字幕文件名
@@ -159,7 +178,7 @@ class AutoSubRename(_PluginBase):
     # 插件图标
     plugin_icon = "rename.png"
     # 插件版本
-    plugin_version = "1.0.3"
+    plugin_version = "1.0.4"
     # 插件作者
     plugin_author = "xdormaelx"
     # 作者主页
@@ -190,6 +209,15 @@ class AutoSubRename(_PluginBase):
         # 批量处理线程
         self._batch_thread = None
     
+    @staticmethod
+    def _normalize_subtitle_exts(exts: str) -> str:
+        """规范化字幕扩展名，并为旧配置补充 SUP 支持。"""
+        values = [ext.strip().lower().lstrip(".") for ext in (exts or "").split(",")]
+        values = [ext for ext in values if ext]
+        if "sup" not in values:
+            values.append("sup")
+        return ",".join(dict.fromkeys(values))
+
     def _get_config(self) -> PluginConfigModel:
         """获取插件配置"""
         # 从系统配置中获取插件配置
@@ -205,7 +233,9 @@ class AutoSubRename(_PluginBase):
             onlyonce=config_data.get("onlyonce", False),
             monitor_dirs=config_data.get("monitor_dirs", ""),
             video_exts=config_data.get("video_exts", "mp4,mkv,avi,ts"),
-            sub_exts=config_data.get("sub_exts", "ass,ssa,srt")
+            sub_exts=self._normalize_subtitle_exts(
+                config_data.get("sub_exts", "ass,ssa,srt,sup")
+            )
         )
     
     def init_plugin(self, config: Dict = None):
@@ -217,7 +247,9 @@ class AutoSubRename(_PluginBase):
                 onlyonce=config.get("onlyonce", False),
                 monitor_dirs=config.get("monitor_dirs", ""),
                 video_exts=config.get("video_exts", "mp4,mkv,avi,ts"),
-                sub_exts=config.get("sub_exts", "ass,ssa,srt")
+                sub_exts=self._normalize_subtitle_exts(
+                    config.get("sub_exts", "ass,ssa,srt,sup")
+                )
             )
             # 保存新配置
             self.__update_config()
@@ -425,13 +457,22 @@ class AutoSubRename(_PluginBase):
         }]
 
     def get_api(self) -> List[Dict[str, Any]]:
-        return [{
-            "path": "/batch_rename",
-            "endpoint": self.batch_rename_api,
-            "methods": ["POST"],
-            "summary": "批量重命名字幕",
-            "description": "立即执行一次批量重命名操作",
-        }]
+        return [
+            {
+                "path": "/batch_rename",
+                "endpoint": self.batch_rename_api,
+                "methods": ["POST"],
+                "summary": "批量重命名字幕",
+                "description": "立即执行一次批量重命名操作",
+            },
+            {
+                "path": "/clear_processed_files",
+                "endpoint": self.clear_processed_files,
+                "methods": ["POST"],
+                "summary": "清除重命名记录缓存",
+                "description": "清除插件记录的已处理字幕文件路径",
+            },
+        ]
 
     def batch_rename_api(self, apikey: str = "") -> schemas.Response:
         """校验 API 密钥后异步启动批量重命名。"""
@@ -442,6 +483,16 @@ class AutoSubRename(_PluginBase):
         self._batch_thread = threading.Thread(target=self.batch_rename, daemon=True)
         self._batch_thread.start()
         return schemas.Response(success=True, message="批量重命名操作已启动")
+
+    def clear_processed_files(self, apikey: str = "") -> schemas.Response:
+        """校验 API 密钥后清除已处理文件路径缓存。"""
+        api_token = getattr(settings, "API_TOKEN", "")
+        if not api_token or apikey != api_token:
+            return schemas.Response(success=False, message="API密钥错误")
+
+        count = len(self._processed_files)
+        self._processed_files.clear()
+        return schemas.Response(success=True, message=f"已清除 {count} 条重命名记录缓存")
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         """
@@ -598,7 +649,40 @@ class AutoSubRename(_PluginBase):
         }
 
     def get_page(self) -> List[Dict]:
-        return []
+        """插件详情页，提供缓存管理操作。"""
+        return [
+            {
+                "component": "VCard",
+                "props": {"variant": "tonal", "class": "pa-4"},
+                "content": [
+                    {
+                        "component": "VCardTitle",
+                        "props": {"class": "px-0"},
+                        "text": "字幕重命名设置",
+                    },
+                    {
+                        "component": "VCardText",
+                        "props": {"class": "px-0"},
+                        "text": "插件会记录已处理的字幕文件路径，避免重复触发。清除缓存不会删除任何视频或字幕文件。",
+                    },
+                    {
+                        "component": "VBtn",
+                        "props": {
+                            "color": "warning",
+                            "variant": "tonal",
+                            "text": "清除重命名记录缓存",
+                        },
+                        "events": {
+                            "click": {
+                                "api": "plugin/AutoSubRename/clear_processed_files",
+                                "method": "post",
+                                "params": {"apikey": settings.API_TOKEN},
+                            }
+                        },
+                    },
+                ],
+            }
+        ]
 
     def get_state(self) -> bool:
         return self._current_config.enabled

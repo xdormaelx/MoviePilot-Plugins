@@ -337,6 +337,12 @@ class AutoSubRename(_PluginBase):
         """批量重命名所有监控目录中的字幕文件"""
         if not self._monitor_dirs:
             logger.warning("未配置监控目录，无法执行批量重命名")
+            if self._current_config.notify:
+                self.post_message(
+                    mtype=NotificationType.Plugin,
+                    title=f"【{self.plugin_name}】批量重命名结果",
+                    text="批量重命名未执行：未配置监控目录。"
+                )
             return
             
         logger.info("开始批量重命名字幕文件...")
@@ -373,14 +379,15 @@ class AutoSubRename(_PluginBase):
                             results.append(f"处理字幕文件 {file_path} 时出错: {str(e)}")
         
         # 发送通知
-        if self._current_config.notify and results:
+        if self._current_config.notify:
             success_count = sum("成功" in r for r in results)
             fail_count = len(results) - success_count
             summary = f"批量重命名完成: 成功 {success_count} 个, 失败 {fail_count} 个"
+            detail = "\n".join(results) if results else "未发现可处理的字幕文件。"
             self.post_message(
                 mtype=NotificationType.Plugin,
                 title=f"【{self.plugin_name}】批量重命名结果",
-                text=f"{summary}\n\n详细结果:\n" + "\n".join(results)
+                text=f"{summary}\n\n详细结果:\n{detail}"
             )
         
         logger.info("批量重命名完成")

@@ -180,6 +180,17 @@ class AutoSubRenameTests(unittest.TestCase):
         self.assertEqual(response.success, True)
         self.assertEqual(called, [True])
 
+    def test_batch_notifies_when_no_monitor_directory(self):
+        plugin = self.module.AutoSubRename.__new__(self.module.AutoSubRename)
+        plugin._monitor_dirs = []
+        plugin._processed_files = set()
+        plugin._current_config = self.module.PluginConfigModel(notify=True)
+        messages = []
+        plugin.post_message = lambda **kwargs: messages.append(kwargs)
+        plugin.batch_rename()
+        self.assertEqual(len(messages), 1)
+        self.assertIn("未配置", messages[0]["text"])
+
 
 if __name__ == "__main__":
     unittest.main()

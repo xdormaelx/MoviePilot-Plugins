@@ -157,7 +157,17 @@ class AutoSubRenameTests(unittest.TestCase):
         form_text = repr(form)
         self.assertIn("一键清除重命名记录缓存", form_text)
         self.assertIn("'model': 'clear_cache'", form_text)
-        self.assertEqual(plugin.get_page(), form)
+        self.assertIn("'modelValue': False", repr(plugin.get_page()))
+
+    def test_detail_page_uses_current_setting_values(self):
+        plugin = self.module.AutoSubRename.__new__(self.module.AutoSubRename)
+        plugin._current_config = self.module.PluginConfigModel(
+            enabled=True, notify=True, clear_cache=False, monitor_dirs="/custom"
+        )
+        page_text = repr(plugin.get_page())
+        self.assertIn("'modelValue': True", page_text)
+        self.assertNotIn("'model': 'enabled'", page_text)
+        self.assertIn("/custom", page_text)
 
     def test_movie_subtitle_uses_only_video_in_directory(self):
         renamer = self.module.SubtitleRenamer()

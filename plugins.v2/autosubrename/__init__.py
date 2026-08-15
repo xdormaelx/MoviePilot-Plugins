@@ -3,6 +3,7 @@ import time
 import threading
 import logging
 import re
+import copy
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, field
 
@@ -179,7 +180,7 @@ class AutoSubRename(_PluginBase):
     # 插件图标
     plugin_icon = "rename.png"
     # 插件版本
-    plugin_version = "1.0.7"
+    plugin_version = "1.0.8"
     # 插件作者
     plugin_author = "xdormaelx"
     # 作者主页
@@ -686,9 +687,48 @@ class AutoSubRename(_PluginBase):
             "sub_exts": self._current_config.sub_exts
         }
 
+    def _get_page_config(self) -> List[Dict]:
+        """将设置表单转换为详情页配置，并注入当前配置值。"""
+        page = copy.deepcopy(self.get_form()[0])
+        values = {
+            "enabled": self._current_config.enabled,
+            "notify": self._current_config.notify,
+            "onlyonce": self._current_config.onlyonce,
+            "clear_cache": False,
+            "monitor_dirs": self._current_config.monitor_dirs,
+            "video_exts": self._current_config.video_exts,
+            "sub_exts": self._current_config.sub_exts,
+        }
+
+        def sync(item: Dict[str, Any]):
+            props = item.get("props") or {}
+            model = props.get("model")
+            if model in values:
+                props.pop("model", None)
+                props["modelValue"] = values[model]
+                if model == "clear_cache":
+                    item["events"] = {
+                        "click": {
+                            "api": "plugin/AutoSubRename/clear_processed_files",
+                            "method": "post",
+                            "params": {"apikey": settings.API_TOKEN},
+                        }
+                    }
+                elif item.get("component") == "VSwitch":
+                    props["disabled"] = True
+                elif item.get("component") in {"VTextField", "VTextarea"}:
+                    props["readonly"] = True
+            item["props"] = props
+            for child in item.get("content") or []:
+                sync(child)
+
+        for item in page:
+            sync(item)
+        return page
+
     def get_page(self) -> List[Dict]:
-        """详情页直接复用插件设置页面。"""
-        return self.get_form()[0]
+        """详情页复用设置页面，并显示当前配置状态。"""
+        return self._get_page_config()
 
     def get_state(self) -> bool:
         return self._current_config.enabled

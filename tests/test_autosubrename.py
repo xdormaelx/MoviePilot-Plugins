@@ -13,6 +13,9 @@ def load_plugin_module():
     app_plugins = types.ModuleType("app.plugins")
 
     class PluginBase:
+        def __init__(self):
+            self.chain = object()
+
         def post_message(self, **kwargs):
             return kwargs
 
@@ -136,6 +139,10 @@ class AutoSubRenameTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.module = load_plugin_module()
+
+    def test_plugin_initializes_moviepilot_base(self):
+        plugin = self.module.AutoSubRename()
+        self.assertTrue(hasattr(plugin, "chain"))
 
     def test_monitor_directory_prefix_is_not_treated_as_child(self):
         plugin = self.module.AutoSubRename.__new__(self.module.AutoSubRename)

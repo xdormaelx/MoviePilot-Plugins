@@ -23,6 +23,7 @@ class PluginConfigModel:
     enabled: bool = False  # 启用插件开关
     notify: bool = False   # 发送通知开关
     onlyonce: bool = False # 立即运行一次开关
+    clear_cache: bool = False # 清除重命名记录缓存开关
     monitor_dirs: str = ""  # 监控目录路径（多行）
     video_exts: str = "mp4,mkv,avi,ts"  # 视频文件扩展名
     sub_exts: str = "ass,ssa,srt,sup"  # 字幕文件扩展名
@@ -178,7 +179,7 @@ class AutoSubRename(_PluginBase):
     # 插件图标
     plugin_icon = "rename.png"
     # 插件版本
-    plugin_version = "1.0.6"
+    plugin_version = "1.0.7"
     # 插件作者
     plugin_author = "xdormaelx"
     # 作者主页
@@ -231,6 +232,7 @@ class AutoSubRename(_PluginBase):
             enabled=config_data.get("enabled", False),
             notify=config_data.get("notify", False),
             onlyonce=config_data.get("onlyonce", False),
+            clear_cache=config_data.get("clear_cache", False),
             monitor_dirs=config_data.get("monitor_dirs", ""),
             video_exts=config_data.get("video_exts", "mp4,mkv,avi,ts"),
             sub_exts=self._normalize_subtitle_exts(
@@ -245,6 +247,7 @@ class AutoSubRename(_PluginBase):
                 enabled=config.get("enabled", False),
                 notify=config.get("notify", False),
                 onlyonce=config.get("onlyonce", False),
+                clear_cache=config.get("clear_cache", False),
                 monitor_dirs=config.get("monitor_dirs", ""),
                 video_exts=config.get("video_exts", "mp4,mkv,avi,ts"),
                 sub_exts=self._normalize_subtitle_exts(
@@ -261,6 +264,11 @@ class AutoSubRename(_PluginBase):
             if normalized_sub_exts != self._current_config.sub_exts:
                 self._current_config.sub_exts = normalized_sub_exts
                 self.__update_config()
+
+        if self._current_config.clear_cache:
+            self._processed_files.clear()
+            self._current_config.clear_cache = False
+            self.__update_config()
 
         # 解析监控目录
         self._monitor_dirs = [d.strip() for d in self._current_config.monitor_dirs.split("\n") if d.strip()]
@@ -295,6 +303,7 @@ class AutoSubRename(_PluginBase):
             "enabled": self._current_config.enabled,
             "notify": self._current_config.notify,
             "onlyonce": self._current_config.onlyonce,
+            "clear_cache": self._current_config.clear_cache,
             "monitor_dirs": self._current_config.monitor_dirs,
             "video_exts": self._current_config.video_exts,
             "sub_exts": self._current_config.sub_exts
@@ -551,6 +560,19 @@ class AutoSubRename(_PluginBase):
                                         }
                                     }
                                 ]
+                            },
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12, "md": 4},
+                                "content": [
+                                    {
+                                        "component": "VSwitch",
+                                        "props": {
+                                            "model": "clear_cache",
+                                            "label": "一键清除重命名记录缓存",
+                                        }
+                                    }
+                                ]
                             }
                         ]
                     },
@@ -638,23 +660,15 @@ class AutoSubRename(_PluginBase):
                                         "props": {
                                             "type": "info",
                                             "variant": "tonal",
-                                            "text": "点击下方按钮只会清除已处理路径缓存，不会删除任何视频或字幕文件。"
+                                            "text": "打开下方开关后会清除已处理路径缓存，不会删除任何视频或字幕文件。"
                                         }
                                     },
                                     {
-                                        "component": "VBtn",
+                                        "component": "VSwitch",
                                         "props": {
-                                            "color": "warning",
-                                            "variant": "tonal",
-                                            "text": "清除重命名记录缓存",
-                                        },
-                                        "events": {
-                                            "click": {
-                                                "api": "plugin/AutoSubRename/clear_processed_files",
-                                                "method": "post",
-                                                "params": {"apikey": settings.API_TOKEN},
-                                            }
-                                        },
+                                            "model": "clear_cache",
+                                            "label": "一键清除重命名记录缓存",
+                                        }
                                     }
                                 ]
                             }
@@ -666,14 +680,15 @@ class AutoSubRename(_PluginBase):
             "enabled": self._current_config.enabled,
             "notify": self._current_config.notify,
             "onlyonce": self._current_config.onlyonce,
+            "clear_cache": self._current_config.clear_cache,
             "monitor_dirs": self._current_config.monitor_dirs,
             "video_exts": self._current_config.video_exts,
             "sub_exts": self._current_config.sub_exts
         }
 
     def get_page(self) -> List[Dict]:
-        """插件详情页暂无独立内容，配置和缓存操作统一放在设置页。"""
-        return []
+        """详情页直接复用插件设置页面。"""
+        return self.get_form()[0]
 
     def get_state(self) -> bool:
         return self._current_config.enabled

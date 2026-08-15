@@ -178,7 +178,7 @@ class AutoSubRename(_PluginBase):
     # 插件图标
     plugin_icon = "rename.png"
     # 插件版本
-    plugin_version = "1.0.4"
+    plugin_version = "1.0.5"
     # 插件作者
     plugin_author = "xdormaelx"
     # 作者主页
@@ -253,7 +253,15 @@ class AutoSubRename(_PluginBase):
             )
             # 保存新配置
             self.__update_config()
-        
+        else:
+            # 为已有配置自动补充新支持的 SUP 扩展名
+            normalized_sub_exts = self._normalize_subtitle_exts(
+                self._current_config.sub_exts
+            )
+            if normalized_sub_exts != self._current_config.sub_exts:
+                self._current_config.sub_exts = normalized_sub_exts
+                self.__update_config()
+
         # 解析监控目录
         self._monitor_dirs = [d.strip() for d in self._current_config.monitor_dirs.split("\n") if d.strip()]
         

@@ -178,7 +178,7 @@ class AutoSubRename(_PluginBase):
     # 插件图标
     plugin_icon = "rename.png"
     # 插件版本
-    plugin_version = "1.0.5"
+    plugin_version = "1.0.6"
     # 插件作者
     plugin_author = "xdormaelx"
     # 作者主页
@@ -638,8 +638,23 @@ class AutoSubRename(_PluginBase):
                                         "props": {
                                             "type": "info",
                                             "variant": "tonal",
-                                            "text": "点击'立即运行一次'会启动后台任务处理所有字幕文件，完成后自动关闭该选项。"
+                                            "text": "点击下方按钮只会清除已处理路径缓存，不会删除任何视频或字幕文件。"
                                         }
+                                    },
+                                    {
+                                        "component": "VBtn",
+                                        "props": {
+                                            "color": "warning",
+                                            "variant": "tonal",
+                                            "text": "清除重命名记录缓存",
+                                        },
+                                        "events": {
+                                            "click": {
+                                                "api": "plugin/AutoSubRename/clear_processed_files",
+                                                "method": "post",
+                                                "params": {"apikey": settings.API_TOKEN},
+                                            }
+                                        },
                                     }
                                 ]
                             }
@@ -657,40 +672,8 @@ class AutoSubRename(_PluginBase):
         }
 
     def get_page(self) -> List[Dict]:
-        """插件详情页，提供缓存管理操作。"""
-        return [
-            {
-                "component": "VCard",
-                "props": {"variant": "tonal", "class": "pa-4"},
-                "content": [
-                    {
-                        "component": "VCardTitle",
-                        "props": {"class": "px-0"},
-                        "text": "字幕重命名设置",
-                    },
-                    {
-                        "component": "VCardText",
-                        "props": {"class": "px-0"},
-                        "text": "插件会记录已处理的字幕文件路径，避免重复触发。清除缓存不会删除任何视频或字幕文件。",
-                    },
-                    {
-                        "component": "VBtn",
-                        "props": {
-                            "color": "warning",
-                            "variant": "tonal",
-                            "text": "清除重命名记录缓存",
-                        },
-                        "events": {
-                            "click": {
-                                "api": "plugin/AutoSubRename/clear_processed_files",
-                                "method": "post",
-                                "params": {"apikey": settings.API_TOKEN},
-                            }
-                        },
-                    },
-                ],
-            }
-        ]
+        """插件详情页暂无独立内容，配置和缓存操作统一放在设置页。"""
+        return []
 
     def get_state(self) -> bool:
         return self._current_config.enabled

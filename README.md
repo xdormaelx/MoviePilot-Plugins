@@ -19,7 +19,7 @@ MoviePilot官方插件市场：https://github.com/jxxghp/MoviePilot-Plugins
 - 可选发送处理结果通知；
 - 支持通过远程命令 `/subrename` 触发批量处理；
 - 支持通过插件 API `POST /batch_rename` 异步触发批量处理（需要提供 MoviePilot API 密钥）；
-- 详情页提供“清除重命名记录缓存”按钮，只清除已处理路径记录，不删除媒体文件；
+- 设置页面提供“清除重命名记录缓存”按钮，只清除已处理路径记录，不删除媒体文件；
 
 **默认扩展名：**
 

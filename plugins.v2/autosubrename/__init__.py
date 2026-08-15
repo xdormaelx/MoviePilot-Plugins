@@ -180,7 +180,7 @@ class AutoSubRename(_PluginBase):
     # 插件图标
     plugin_icon = "rename.png"
     # 插件版本
-    plugin_version = "1.0.8"
+    plugin_version = "1.0.9"
     # 插件作者
     plugin_author = "xdormaelx"
     # 作者主页
@@ -474,6 +474,11 @@ class AutoSubRename(_PluginBase):
             "data": {"action": "batch_rename"}
         }]
 
+    @staticmethod
+    def get_render_mode() -> Tuple[str, str]:
+        """使用 Vue 联邦组件，让详情页和设置页共用同一套可编辑页面。"""
+        return "vue", "dist/assets"
+
     def get_api(self) -> List[Dict[str, Any]]:
         return [
             {
@@ -727,8 +732,8 @@ class AutoSubRename(_PluginBase):
         return page
 
     def get_page(self) -> List[Dict]:
-        """详情页复用设置页面，并显示当前配置状态。"""
-        return self._get_page_config()
+        """Vue 模式下由远程 Page 组件渲染详情页。"""
+        return []
 
     def get_state(self) -> bool:
         return self._current_config.enabled
